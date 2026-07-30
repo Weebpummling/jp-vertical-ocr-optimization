@@ -1,0 +1,74 @@
+# ---------------------------------------------------------------------------
+# Data payloads never enter this repo.
+#
+# ReferenceTruth must stay walled off as an honest
+# hold-out, and source scans / research datasets are not ours to redistribute.
+# Only schemas, vocabularies, small fixtures, and code are versioned here.
+# ---------------------------------------------------------------------------
+
+# Research datasets and transcription output
+*.xlsx
+*.xls
+*.parquet
+data/**
+!data/README.md
+!data/vocab/
+!data/vocab/**
+!data/.gitkeep
+
+# Ground truth — hold-out integrity depends on this staying out
+groundtruth/
+**/ground_truth/
+**/holdout/
+
+# Page images, scans, crops, IIIF caches
+manuals/**
+!manuals/README.md
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.pdf
+
+# Model weights and fine-tuning artifacts
+*.pt
+*.pth
+*.safetensors
+*.onnx
+checkpoints/
+runs/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node / front end
+node_modules/
+dist/
+build/
+.vite/
+
+# Logs and local run artifacts
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

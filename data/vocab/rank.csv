@@ -1,0 +1,12 @@
+rank_code,label_ja,label_en,seniority_order,variants,valid_from,valid_to
+juni,准尉,Warrant Officer,10,,1920-01-01,
+shoi,少尉,Second Lieutenant,20,,,
+chui,中尉,First Lieutenant,30,,,
+taii,大尉,Captain,40,,,
+shosa,少佐,Major,50,,,
+chusa,中佐,Lieutenant Colonel,60,,,
+taisa,大佐,Colonel,70,,,
+shosho,少将,Major General,80,少將,,
+chujo,中将,Lieutenant General,90,中將,,
+taisho,大将,General,100,大將,,
+gensui,元帥,Field Marshal,110,,,

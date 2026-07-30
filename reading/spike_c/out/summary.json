@@ -1,0 +1,182 @@
+[
+ {
+  "panel": "f060_p0",
+  "status": "ok",
+  "skew_deg": 0.462,
+  "bands_detected": 11,
+  "bands_matched": "11/11",
+  "mean_residual_frac": 0.0,
+  "n_columns": 10
+ },
+ {
+  "panel": "f060_p1",
+  "status": "ok",
+  "skew_deg": 0.24,
+  "bands_detected": 4,
+  "bands_matched": "4/11",
+  "mean_residual_frac": 0.0034,
+  "n_columns": 3
+ },
+ {
+  "panel": "f100_p0",
+  "status": "ok",
+  "skew_deg": 0.254,
+  "bands_detected": 12,
+  "bands_matched": "11/11",
+  "mean_residual_frac": 0.0014,
+  "n_columns": 12
+ },
+ {
+  "panel": "f100_p1",
+  "status": "ok",
+  "skew_deg": 0.74,
+  "bands_detected": 5,
+  "bands_matched": "5/11",
+  "mean_residual_frac": 0.0023,
+  "n_columns": 3
+ },
+ {
+  "panel": "f200_p0",
+  "status": "ok",
+  "skew_deg": 1.219,
+  "bands_detected": 6,
+  "bands_matched": "6/11",
+  "mean_residual_frac": 0.0034,
+  "n_columns": 11
+ },
+ {
+  "panel": "f200_p1",
+  "status": "ok",
+  "skew_deg": -0.475,
+  "bands_detected": 12,
+  "bands_matched": "10/11",
+  "mean_residual_frac": 0.0016,
+  "n_columns": 10
+ },
+ {
+  "panel": "f300_p0",
+  "status": "ok",
+  "skew_deg": -0.218,
+  "bands_detected": 12,
+  "bands_matched": "10/11",
+  "mean_residual_frac": 0.0026,
+  "n_columns": 11
+ },
+ {
+  "panel": "f300_p1",
+  "status": "ok",
+  "skew_deg": 0.201,
+  "bands_detected": 11,
+  "bands_matched": "10/11",
+  "mean_residual_frac": 0.0029,
+  "n_columns": 9
+ },
+ {
+  "panel": "f400_p0",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 25,
+  "bands_matched": "11/11",
+  "mean_residual_frac": 0.0049,
+  "n_columns": 5
+ },
+ {
+  "panel": "f400_p1",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 14,
+  "bands_matched": "11/11",
+  "mean_residual_frac": 0.0047,
+  "n_columns": 7
+ },
+ {
+  "panel": "f500_p0",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 11,
+  "bands_matched": "10/11",
+  "mean_residual_frac": 0.0042,
+  "n_columns": 11
+ },
+ {
+  "panel": "f500_p1",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 12,
+  "bands_matched": "11/11",
+  "mean_residual_frac": 0.002,
+  "n_columns": 11
+ },
+ {
+  "panel": "f600_p0",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 12,
+  "bands_matched": "11/11",
+  "mean_residual_frac": 0.002,
+  "n_columns": 13
+ },
+ {
+  "panel": "f600_p1",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 11,
+  "bands_matched": "8/11",
+  "mean_residual_frac": 0.0032,
+  "n_columns": 12
+ },
+ {
+  "panel": "f700_p0",
+  "status": "ok",
+  "skew_deg": -0.186,
+  "bands_detected": 12,
+  "bands_matched": "9/11",
+  "mean_residual_frac": 0.0019,
+  "n_columns": 5
+ },
+ {
+  "panel": "f700_p1",
+  "status": "ok",
+  "skew_deg": 0.951,
+  "bands_detected": 28,
+  "bands_matched": "11/11",
+  "mean_residual_frac": 0.0018,
+  "n_columns": 1
+ },
+ {
+  "panel": "f800_p0",
+  "status": "ok",
+  "skew_deg": -0.191,
+  "bands_detected": 13,
+  "bands_matched": "6/11",
+  "mean_residual_frac": 0.0029,
+  "n_columns": 3
+ },
+ {
+  "panel": "f800_p1",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 13,
+  "bands_matched": "7/11",
+  "mean_residual_frac": 0.0035,
+  "n_columns": 3
+ },
+ {
+  "panel": "f850_p0",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 14,
+  "bands_matched": "9/11",
+  "mean_residual_frac": 0.0043,
+  "n_columns": 3
+ },
+ {
+  "panel": "f850_p1",
+  "status": "ok",
+  "skew_deg": 0.0,
+  "bands_detected": 13,
+  "bands_matched": "6/11",
+  "mean_residual_frac": 0.0035,
+  "n_columns": 3
+ }
+]

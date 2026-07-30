@@ -1,0 +1,24 @@
+series,edition_chosa,edition_year,pid,index_pid,access,verified,notes
+active,大正3年7月1日調,1914,930891,930896,internet_public,yes,調 date confirmed via lab API
+active,大正6年9月1日調,1917,930892,,internet_public,yes,
+active,大正7年9月1日調,1918,930897,,internet_public,yes,
+active,大正9年9月1日調,1920,930893,930898,internet_public,yes,
+active,大正11年調,1922,,1152237,internet_public,census_only,DECIDED: panel starts 1923; this surviving 索引 (99 canvases; syllabary name census with volume-page refs) is ingested as a 1922 existence census for coverage/exit-dating - not a panel year
+active,大正12年9月1日調,1923,930894,930899,internet_public,yes,
+active,大正13年9月1日調,1924,930895,930900,internet_public,yes,
+active,大正14年9月1日調,1925,1908495,,internet_public,yes,調 date confirmed (was inferred)
+active,大正15年9月1日調,1926,1908494,,internet_public,yes,881 pp 偕行社
+active,昭和2年9月1日調,1927,1454434,,internet_public,yes,
+active,昭和3年9月1日調,1928,1454433,,internet_public,yes,
+active,昭和4年9月1日調,1929,1454435,,internet_public,yes,
+active,昭和5年9月1日調,1930,1454436,,internet_public,yes,
+active,昭和6年9月1日調,1931,1454438,,internet_public,yes,
+active,昭和7年9月1日調,1932,1454441,,internet_public,yes,
+active,昭和8年9月1日調,1933,1449426,,internet_public,yes,索引付; manifest + pages fetched; 874 canvases; fulltext-json pulled (34 MB)
+active,昭和9年9月1日調,1934,1449461,1449429,internet_public,yes,1449429/1449981 also 索引付
+active,昭和10年9月1日調,1935,1445522,1449474,internet_public,yes,1449474 is 索引付
+active,昭和11年9月1日調,1936,1454447,,internet_public,yes,924 pp 偕行社; fulltext-json verified
+reserve_yobi,大正12年4月1日調,1923,942278,,internet_public,partial,予備役
+reserve_yobi,大正13年4月1日調,1924,942279,,internet_public,partial,予備役
+reserve_kobi,大正12年4月1日調,1923,942280,,internet_public,partial,後備役
+reserve_kobi,大正13年4月1日調,1924,942281,,internet_public,partial,後備役

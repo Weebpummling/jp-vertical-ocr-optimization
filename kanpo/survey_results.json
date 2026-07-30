@@ -1,0 +1,424 @@
+{
+ "1922-04": {
+  "issues": 24,
+  "gogai": 0,
+  "with_structures": 24,
+  "with_section": 0,
+  "section_in_gogai": 0,
+  "rows": [
+   {
+    "date": "1922-04-01",
+    "pid": "2955014",
+    "gogai": false,
+    "n_canvases": 42,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-04",
+    "pid": "2955015",
+    "gogai": false,
+    "n_canvases": 25,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-05",
+    "pid": "2955016",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-06",
+    "pid": "2955017",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-07",
+    "pid": "2955018",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-08",
+    "pid": "2955019",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-10",
+    "pid": "2955020",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-11",
+    "pid": "2955021",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-12",
+    "pid": "2955022",
+    "gogai": false,
+    "n_canvases": 21,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-13",
+    "pid": "2955023",
+    "gogai": false,
+    "n_canvases": 21,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-14",
+    "pid": "2955024",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-15",
+    "pid": "2955025",
+    "gogai": false,
+    "n_canvases": 21,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-17",
+    "pid": "2955026",
+    "gogai": false,
+    "n_canvases": 21,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-18",
+    "pid": "2955027",
+    "gogai": false,
+    "n_canvases": 22,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-19",
+    "pid": "2955028",
+    "gogai": false,
+    "n_canvases": 26,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-20",
+    "pid": "2955029",
+    "gogai": false,
+    "n_canvases": 26,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-21",
+    "pid": "2955030",
+    "gogai": false,
+    "n_canvases": 26,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-22",
+    "pid": "2955031",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-24",
+    "pid": "2955032",
+    "gogai": false,
+    "n_canvases": 29,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-25",
+    "pid": "2955033",
+    "gogai": false,
+    "n_canvases": 30,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-26",
+    "pid": "2955034",
+    "gogai": false,
+    "n_canvases": 26,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-27",
+    "pid": "2955035",
+    "gogai": false,
+    "n_canvases": 26,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-28",
+    "pid": "2955036",
+    "gogai": false,
+    "n_canvases": 30,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1922-04-29",
+    "pid": "2955037",
+    "gogai": false,
+    "n_canvases": 26,
+    "has_structures": true,
+    "section_hits": []
+   }
+  ]
+ },
+ "1935-04": {
+  "issues": 24,
+  "gogai": 0,
+  "with_structures": 24,
+  "with_section": 4,
+  "section_in_gogai": 0,
+  "rows": [
+   {
+    "date": "1935-04-01",
+    "pid": "2958950",
+    "gogai": false,
+    "n_canvases": 49,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-02",
+    "pid": "2958951",
+    "gogai": false,
+    "n_canvases": 33,
+    "has_structures": true,
+    "section_hits": [
+     {
+      "label": "敍任及辭令 / - / - / 朴泳孝(朝鮮總督府)/p123",
+      "first_canvas": "14"
+     }
+    ]
+   },
+   {
+    "date": "1935-04-04",
+    "pid": "2958952",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-05",
+    "pid": "2958953",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-06",
+    "pid": "2958954",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-08",
+    "pid": "2958955",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-09",
+    "pid": "2958956",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": [
+     {
+      "label": "敍任及辭令 / - / - / 荒木貞夫(陸軍省)/p312",
+      "first_canvas": "13"
+     }
+    ]
+   },
+   {
+    "date": "1935-04-10",
+    "pid": "2958957",
+    "gogai": false,
+    "n_canvases": 18,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-11",
+    "pid": "2958958",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-12",
+    "pid": "2958959",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-13",
+    "pid": "2958960",
+    "gogai": false,
+    "n_canvases": 50,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-15",
+    "pid": "2958961",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-16",
+    "pid": "2958962",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-17",
+    "pid": "2958963",
+    "gogai": false,
+    "n_canvases": 18,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-18",
+    "pid": "2958964",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-19",
+    "pid": "2958965",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": [
+     {
+      "label": "敍任及辭令 / - / - / 古莊幹郞等(宮内省)/p623",
+      "first_canvas": "3"
+     }
+    ]
+   },
+   {
+    "date": "1935-04-20",
+    "pid": "2958966",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-22",
+    "pid": "2958967",
+    "gogai": false,
+    "n_canvases": 17,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-23",
+    "pid": "2958968",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-24",
+    "pid": "2958969",
+    "gogai": false,
+    "n_canvases": 18,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-25",
+    "pid": "2958970",
+    "gogai": false,
+    "n_canvases": 19,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-26",
+    "pid": "2958971",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   },
+   {
+    "date": "1935-04-27",
+    "pid": "2958972",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": [
+     {
+      "label": "敍任及辭令 / - / - / 祥子(賞勳局)/p841",
+      "first_canvas": "4"
+     }
+    ]
+   },
+   {
+    "date": "1935-04-30",
+    "pid": "2958973",
+    "gogai": false,
+    "n_canvases": 34,
+    "has_structures": true,
+    "section_hits": []
+   }
+  ]
+ }
+}
