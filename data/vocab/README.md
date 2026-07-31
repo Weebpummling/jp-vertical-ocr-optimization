@@ -1,8 +1,8 @@
 # Controlled vocabularies
 
-These are the closed vocabularies the design relies on. Their job is to make reads
+These are the closed vocabularies the pipeline relies on. Their job is to make reads
 **rejectable**: an out-of-set rank or branch value is auto-rejected rather than silently
-accepted (design v2.1 §4.3, Lever 3).
+accepted.
 
 | File | Covers |
 |---|---|
@@ -17,16 +17,32 @@ accepted (design v2.1 §4.3, Lever 3).
 騎兵 918 · 輜重兵 652 · 野砲兵 514 · 重砲兵 396 · 砲兵 335 · 野戦砲 119 · 要塞砲兵 113 ·
 航空兵 103 · 要塞砲 53 · 野戦重砲兵 26. Era-variant artillery names are mapped as
 `variants` of canonical codes (野戦砲/野砲兵 → 野戦砲兵; 要塞砲兵/要塞砲 → 重砲兵, the
-1920s renaming). **The roster side still needs its own verification pass** against real
-1922+ pages before freeze. Specifically unresolved:
+1920s renaming).
 
-- Whether the artillery variant→canonical mapping matches how each roster *edition*
-  prints the branch (the mapping above reflects academy-era usage).
-- Exact `valid_from`/`valid_to` dates — 航空兵 became a separate branch in 1925, and the
-  兵科 system was reorganized in 1940 (outside the window; relevant to Phase S).
-- Which service departments (各部) appear in the seniority lists at all, versus being
-  listed separately.
-- The full kyūjitai variant set. `variants` currently holds only obvious forms.
+## Roster-side verification (31 Jul 2026)
+
+Method: token counts over NDL's precomputed full text for three editions spanning the
+window — 大正12 (1923, pid 930894), 大正15 (1926, pid 1908494), 昭和10 (1935,
+pid 1449474). Machine text is used only to *inventory the labels that occur*; it decides
+nothing about any officer.
+
+| Verified | Result |
+|---|---|
+| Ranks | Complete. All tokens resolve, kyūjitai generals (少將/中將/大將) via variants. 准尉 in force throughout; 特務曹長 absent, consistent with the 1920 renaming. |
+| Combat branches | 步兵・騎兵・砲兵・野砲兵・野戰砲兵・重砲兵・山砲兵・野戰重砲兵・工兵・輜重兵・憲兵 all present in every sampled edition and all resolve. Kyūjitai forms dominate (步兵 ~5,000/edition vs 歩兵 ~300–600). |
+| 航空兵 | 0 (1923) → 468 (1926) → present (1935). `valid_from = 1925-05-01` set accordingly — confirmed by the corpus itself. |
+| 要塞砲兵 | Zero occurrences 1923+, consistent with the 1919 merge into 重砲兵. The variant stays for the 1914/1917 anchor volumes. |
+| Folds | 戰/聯/臺 added to `kanji_variant.csv` — the survey's dominant forms (野戰砲兵, 聯隊, 臺灣) fail to fold without them. |
+
+Open for the freeze decision:
+
+- **法務部 / 技術部: zero occurrences in all three editions.** These services do not
+  appear as officer branches inside the window. Options: date them out (`valid_from`
+  post-window) or drop them; either way closed-vocabulary rejection stays honest.
+- **Service coverage shifts by era**: 軍醫 falls from ~2,100 (1923/1926) to 214 in the
+  1935 edition, 獸醫 similarly. The Shōwa-era editions likely split 各部 coverage —
+  relevant to the worklist item on Shōwa reserve/service editions, not to the
+  vocabulary itself.
 
 Anything read from a real volume that fails against these lists is a signal to **fix the
 vocabulary**, not to force the read.
