@@ -150,8 +150,9 @@ the observed officers/hour recorded as the baseline all later phases are judged 
 - [ ] Three-pane workstation: zoomable page (cell auto-centered) · structured entry form
       (氏名, 兵科, 階級, 職名, 任官年月日, seniority, notes) · candidate panel.
 - [ ] Keyboard-first, IME-aware entry — a whole officer without touching the mouse.
-- [ ] Era-date normalizer (明治/大正/昭和 → canonical); ambiguous parses **flagged, not
-      guessed**.
+- [x] Era-date normalizer (`reading/eradate.py`): 明治/大正/昭和 + kanji numerals in
+      the roster's digit-juxtaposition notation → canonical dates; era bounds
+      enforced; every ambiguous parse refused with a recorded reason.
 - [ ] Difficult-character toolkit: variant palette (kyūjitai↔shinjitai), radical/IDS
       lookup, and attach-the-cropped-glyph so an unreadable character never blocks a record.
 - [ ] Per-character uncertainty capture; one-click seal/damage flag → alt-scan flip.
