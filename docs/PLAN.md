@@ -99,14 +99,18 @@ train/hold-out split fixed; all four spikes have written answers.
 - [~] **Backups:** `scripts/backup.ps1` (nightly dump, self-verifying, 14-day rotation;
       `schtasks` one-liner in the header). Schedule it once the DB runs. Off-machine
       destination: the lead's personal cloud storage (configured privately).
-- [ ] Audit logging wired as Postgres triggers (not app-layer) so no write path can
-      bypass it.
+- [x] Audit logging wired as Postgres triggers (not app-layer) so no write path can
+      bypass it — full before/after images, append-only log, TRUNCATE refused;
+      guarantees asserted by `db/audit_check.sql` in CI on every push.
 - [x] CI on every push: schema applies to a fresh Postgres 16; vocab invariants linted
       (`.github/workflows/ci.yml`, `scripts/lint_vocab.py`).
 - [~] Worklist registry: roster PIDs 1914–1936 seeded (`ingestion/worklist-roster.csv`);
       Shōwa-era reserve-list editions and 号外 enumeration still to add.
-- [ ] IIIF client: manifest fetch (`https://dl.ndl.go.jp/api/iiif/{PID}/manifest.json`),
-      per-frame region crops, retrieval-date stamping for non-IIIF sources.
+- [~] IIIF client (`ingestion/iiif_client.py`): manifest fetch, volume + page
+      registration (audited, idempotent), polite cached full-page retrieval with
+      retrieval-date stamping. Verified end-to-end on pid 1449474 (885 pages
+      registered, frame 51 fetched). Still to add: per-frame region crops and
+      non-IIIF source stamping.
 - [x] Ground truth registered and **split fixed** (29 Jul 2026): 15,029 records,
       10,595 train / 4,434 hold-out, hash-deterministic rule, manifest hash committed —
       see `docs/ground-truth-split.md`. The verified asset is person-level; page-level
