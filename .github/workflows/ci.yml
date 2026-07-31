@@ -24,6 +24,10 @@ jobs:
         env:
           PGPASSWORD: ci
         run: psql -h localhost -U jpocr -d jpocr -v ON_ERROR_STOP=1 -f db/schema.sql
+      - name: Audit triggers hold their guarantees
+        env:
+          PGPASSWORD: ci
+        run: psql -h localhost -U jpocr -d jpocr -v ON_ERROR_STOP=1 -f db/audit_check.sql
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

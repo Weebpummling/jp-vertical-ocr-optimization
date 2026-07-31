@@ -288,3 +288,103 @@ CREATE INDEX kanpo_event_pending_idx   ON kanpo_event (event_id) WHERE validatio
 CREATE INDEX roster_cell_page_idx      ON roster_cell (page_id);
 CREATE INDEX roster_cell_flagged_idx   ON roster_cell (cell_id) WHERE audit_status <> 'ok';
 CREATE INDEX unit_deployment_unit_idx  ON unit_deployment (unit_id, interval_start);
+CREATE INDEX audit_log_row_idx         ON audit_log (table_name, row_id);
+
+-- --------------------------------------------------------------------------
+-- Audit triggers — database-level, so no write path can bypass them
+--
+-- Every row written to a data table is recorded in audit_log by an AFTER
+-- trigger, with the full before/after images. The actor is read from the
+-- app.user_id session setting when the application has set one; direct psql
+-- writes are still audited, just with a NULL actor.
+--
+-- The three vocab tables (text PKs) are not row-audited: they are loaded from
+-- version-controlled CSVs by scripts/load_vocab.py, so their provenance is the
+-- git history. audit_log.row_id stays uuid NOT NULL for everything audited.
+--
+-- Idempotent (CREATE OR REPLACE / DROP IF EXISTS) so the section can be
+-- re-applied to a live database that predates it.
+-- --------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION audit_row() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_row   uuid;
+    v_actor uuid;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        v_row := (to_jsonb(OLD) ->> TG_ARGV[0])::uuid;
+    ELSE
+        v_row := (to_jsonb(NEW) ->> TG_ARGV[0])::uuid;
+    END IF;
+    v_actor := NULLIF(current_setting('app.user_id', true), '')::uuid;
+    INSERT INTO audit_log (table_name, row_id, action, before_val, after_val, actor)
+    VALUES (
+        TG_TABLE_NAME,
+        v_row,
+        lower(TG_OP),
+        CASE WHEN TG_OP IN ('UPDATE','DELETE') THEN to_jsonb(OLD) END,
+        CASE WHEN TG_OP IN ('INSERT','UPDATE') THEN to_jsonb(NEW) END,
+        v_actor
+    );
+    RETURN NULL;
+END $$;
+
+-- audit_log itself is append-only: history that can be edited is not history.
+CREATE OR REPLACE FUNCTION audit_log_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'audit_log is append-only' USING ERRCODE = 'AUD01';
+END $$;
+
+-- TRUNCATE fires no row triggers, so it would be an unaudited mass delete.
+CREATE OR REPLACE FUNCTION forbid_truncate() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'TRUNCATE is forbidden on audited tables' USING ERRCODE = 'AUD02';
+END $$;
+
+DO $$
+DECLARE
+    t record;
+BEGIN
+    FOR t IN
+        SELECT * FROM (VALUES
+            ('person',           'person_id'),
+            ('observation',      'obs_id'),
+            ('roster_cell',      'cell_id'),
+            ('source_page',      'page_id'),
+            ('source_volume',    'volume_id'),
+            ('layout_template',  'template_id'),
+            ('unit',             'unit_id'),
+            ('unit_deployment',  'deploy_id'),
+            ('kanpo_event',      'event_id'),
+            ('machine_reading',  'reading_id'),
+            ('reference_truth',  'truth_id'),
+            ('linkage_decision', 'decision_id'),
+            ('task',             'task_id'),
+            ('app_user',         'user_id')
+        ) AS v(tbl, pk)
+    LOOP
+        EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t.tbl || '_audit', t.tbl);
+        EXECUTE format(
+            'CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I
+                 FOR EACH ROW EXECUTE FUNCTION audit_row(%L)',
+            t.tbl || '_audit', t.tbl, t.pk);
+        EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t.tbl || '_no_truncate', t.tbl);
+        EXECUTE format(
+            'CREATE TRIGGER %I BEFORE TRUNCATE ON %I
+                 FOR EACH STATEMENT EXECUTE FUNCTION forbid_truncate()',
+            t.tbl || '_no_truncate', t.tbl);
+    END LOOP;
+END $$;
+
+DROP TRIGGER IF EXISTS audit_log_append_only ON audit_log;
+CREATE TRIGGER audit_log_append_only
+    BEFORE UPDATE OR DELETE ON audit_log
+    FOR EACH ROW EXECUTE FUNCTION audit_log_immutable();
+
+DROP TRIGGER IF EXISTS audit_log_no_truncate ON audit_log;
+CREATE TRIGGER audit_log_no_truncate
+    BEFORE TRUNCATE ON audit_log
+    FOR EACH STATEMENT EXECUTE FUNCTION forbid_truncate();
