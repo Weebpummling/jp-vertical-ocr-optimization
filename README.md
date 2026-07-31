@@ -42,6 +42,41 @@ maintenance and operating manuals. Each is a deliverable in its own right (a cle
 modernized, translated table) and collectively they are a **table-reading testbed** that
 hardens the extraction pipeline against a second family of layouts.
 
+## Side capability — quick transcription + translation from NDL's own OCR
+
+A byproduct of the Spike B access work: for any volume in NDL's Next-Gen Digital
+Library, there is a fast path that skips our reading pipeline entirely. NDL has
+already run production OCR over the whole collection, and it is retrievable with
+per-line coordinates via `GET https://lab.ndl.go.jp/dl/api/book/fulltext-json/{PID}`.
+Feed a PID and NDL's OCR does the primary reading; our layer only **normalizes**:
+
+- rebuild line breaks from the per-line coordinates, one block per frame (koma),
+  each block carrying its viewer URL as provenance;
+- resolve frame ↔ printed-page numbering from the book API's TOC anchors
+  (`/dl/api/book/{PID}`), so every passage cites both a frame and a printed page;
+- chunk the normalized text and machine-translate it, keeping the frame/page
+  references on every section of the translation.
+
+The result is a paired Japanese transcription and referenced English translation
+of a full volume in minutes, at the fidelity of NDL's uncorrected OCR — the same
+standing as any Layer 4 output: a machine proposal, never authoritative. First
+artifact produced this way: 歩兵操典 (Infantry Drill Regulations, 川流堂 1940,
+pid 1446616), 207 frames transcribed and translated end-to-end.
+
+Tooling, in [`scripts/`](scripts/):
+
+- [`scripts/ndl_fulltext_pull.ps1`](scripts/ndl_fulltext_pull.ps1) — PID in;
+  normalized per-frame transcription and translation-ready chunk files out.
+- [`scripts/translation_docx.ps1`](scripts/translation_docx.ps1) — renders the
+  merged, frame-referenced translation markdown to .docx via Word COM (for
+  machines without pandoc), frame headings becoming a navigable index.
+
+The translation step between the two is a model or a human working through the
+chunk files; it is deliberately not a script.
+
+Per the data policy below, the outputs live in the private data home
+(`%JP_OCR_DATA%/manuals/`), not in this repository.
+
 ## Architecture
 
 Nine layers over one relational core (PostgreSQL).
