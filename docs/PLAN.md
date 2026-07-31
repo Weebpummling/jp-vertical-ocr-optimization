@@ -87,9 +87,8 @@ retrieval, ground truth registered, spikes A–D answered.
 **Exit criterion:** any page is zoomable and provenanced; ground truth is loaded with its
 train/hold-out split fixed; all four spikes have written answers.
 
-- [ ] Freeze the Phase-0/1 schema (`db/schema.sql`) — Person, Observation, RosterCell,
-      SourcePage/Volume, KanpoEvent, Unit, UnitDeployment, ReferenceTruth,
-      MachineReading, LinkageDecision, User/Task/AuditLog.
+- [x] Schema frozen 31 Jul 2026 (`db/schema.sql`) — 18 tables, audit triggers,
+      vocabularies loaded. Changes from here are deliberate migrations.
 - [x] Verify controlled vocabularies — `branch.csv` reconciled against the academy
       dataset's 13 observed labels, and roster-side verified against the 1923, 1926,
       and 1935 editions via NDL full text (see `data/vocab/README.md`): ranks complete,
@@ -100,9 +99,10 @@ train/hold-out split fixed; all four spikes have written answers.
 - [x] Docker Compose running on the lead's machine: Postgres 16 core with schema
       init and guarded data volume; stack verified healthy with vocabularies
       loaded and three volumes registered.
-- [~] **Backups:** `scripts/backup.ps1` (nightly dump, self-verifying, 14-day rotation;
-      `schtasks` one-liner in the header). Schedule it once the DB runs. Off-machine
-      destination: the lead's personal cloud storage (configured privately).
+- [x] **Backups:** `scripts/backup.ps1` scheduled daily 02:00 (byte-exact dump via
+      docker cp, Japanese-sentinel corruption check, 14-day rotation; restore
+      round-trip verified). The 03:00 irreplaceables snapshot mirrors off-machine
+      to the lead's cloud storage with hash verification at both ends.
 - [x] Audit logging wired as Postgres triggers (not app-layer) so no write path can
       bypass it — full before/after images, append-only log, TRUNCATE refused;
       guarantees asserted by `db/audit_check.sql` in CI on every push.

@@ -1,6 +1,8 @@
 -- ===========================================================================
 -- jp-vertical-ocr-optimization — relational core
--- Phase 0 draft, from design v2.1 §15. NOT YET FROZEN.
+-- FROZEN 31 Jul 2026 (Phase 0 exit). Changes from here are migrations:
+-- written as their own idempotent scripts, applied deliberately, never by
+-- editing history. CI applies this file to a fresh Postgres 16 on every push.
 --
 -- Invariants this schema is built to enforce:
 --   * Observation.person_id stays NULL until linked, so unlinked records are
