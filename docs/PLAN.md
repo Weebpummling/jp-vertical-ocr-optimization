@@ -90,12 +90,13 @@ train/hold-out split fixed; all four spikes have written answers.
 - [ ] Freeze the Phase-0/1 schema (`db/schema.sql`) — Person, Observation, RosterCell,
       SourcePage/Volume, KanpoEvent, Unit, UnitDeployment, ReferenceTruth,
       MachineReading, LinkageDecision, User/Task/AuditLog.
-- [~] Verify controlled vocabularies — `branch.csv` reconciled against the academy
+- [x] Verify controlled vocabularies — `branch.csv` reconciled against the academy
       dataset's 13 observed labels, and roster-side verified against the 1923, 1926,
       and 1935 editions via NDL full text (see `data/vocab/README.md`): ranks complete,
       all combat branches resolve, `kokuhei` dated 1925-05-01 from the corpus itself,
-      folds 戰/聯/臺 added. Remaining before freeze: the lead's call on 法務部/技術部
-      (zero occurrences in-window).
+      folds 戰/聯/臺 added. 法務部/技術部 dropped by the lead's decision (zero
+      in-window occurrences). **Vocabularies frozen 31 Jul 2026**: 11 ranks,
+      14 branches, 28 variants.
 - [~] Docker Compose written (`docker-compose.yml`, Postgres core with schema init and
       guarded data volume). **Docker Desktop is not yet installed on the lead's
       machine** — needs an elevated install by the lead before the stack can start.

@@ -34,15 +34,17 @@ nothing about any officer.
 | 要塞砲兵 | Zero occurrences 1923+, consistent with the 1919 merge into 重砲兵. The variant stays for the 1914/1917 anchor volumes. |
 | Folds | 戰/聯/臺 added to `kanji_variant.csv` — the survey's dominant forms (野戰砲兵, 聯隊, 臺灣) fail to fold without them. |
 
-Open for the freeze decision:
+**Freeze decisions (31 Jul 2026, lead):**
 
-- **法務部 / 技術部: zero occurrences in all three editions.** These services do not
-  appear as officer branches inside the window. Options: date them out (`valid_from`
-  post-window) or drop them; either way closed-vocabulary rejection stays honest.
-- **Service coverage shifts by era**: 軍醫 falls from ~2,100 (1923/1926) to 214 in the
-  1935 edition, 獸醫 similarly. The Shōwa-era editions likely split 各部 coverage —
-  relevant to the worklist item on Shōwa reserve/service editions, not to the
-  vocabulary itself.
+- **法務部 / 技術部: dropped.** Zero occurrences in all three sampled editions — they
+  are not officer branches inside the window. If a later volume ever surfaces either,
+  that is a vocabulary change with its own migration, not a reload.
+- **The vocabularies are frozen as of this decision**: 11 ranks, 14 branches,
+  28 kanji variants. Changes from here are logged, argued-for events.
+
+One coverage observation, recorded for the worklist rather than the vocabulary:
+軍醫 falls from ~2,100 (1923/1926) to 214 in the 1935 edition, 獸醫 similarly — the
+Shōwa-era editions likely split 各部 coverage into separate publications.
 
 Anything read from a real volume that fails against these lists is a signal to **fix the
 vocabulary**, not to force the read.
