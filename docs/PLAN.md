@@ -97,9 +97,9 @@ train/hold-out split fixed; all four spikes have written answers.
       folds 戰/聯/臺 added. 法務部/技術部 dropped by the lead's decision (zero
       in-window occurrences). **Vocabularies frozen 31 Jul 2026**: 11 ranks,
       14 branches, 28 variants.
-- [~] Docker Compose written (`docker-compose.yml`, Postgres core with schema init and
-      guarded data volume). **Docker Desktop is not yet installed on the lead's
-      machine** — needs an elevated install by the lead before the stack can start.
+- [x] Docker Compose running on the lead's machine: Postgres 16 core with schema
+      init and guarded data volume; stack verified healthy with vocabularies
+      loaded and three volumes registered.
 - [~] **Backups:** `scripts/backup.ps1` (nightly dump, self-verifying, 14-day rotation;
       `schtasks` one-liner in the header). Schedule it once the DB runs. Off-machine
       destination: the lead's personal cloud storage (configured privately).
@@ -110,11 +110,11 @@ train/hold-out split fixed; all four spikes have written answers.
       (`.github/workflows/ci.yml`, `scripts/lint_vocab.py`).
 - [~] Worklist registry: roster PIDs 1914–1936 seeded (`ingestion/worklist-roster.csv`);
       Shōwa-era reserve-list editions and 号外 enumeration still to add.
-- [~] IIIF client (`ingestion/iiif_client.py`): manifest fetch, volume + page
-      registration (audited, idempotent), polite cached full-page retrieval with
-      retrieval-date stamping. Verified end-to-end on pid 1449474 (885 pages
-      registered, frame 51 fetched). Still to add: per-frame region crops and
-      non-IIIF source stamping.
+- [x] IIIF client (`ingestion/iiif_client.py`): manifest fetch (cached), volume +
+      page registration (audited, idempotent), polite cached full-page retrieval,
+      and per-cell region crops as re-checkable IIIF URLs — verified on real
+      officer cells of pid 1449474. Non-IIIF source stamping deferred until a
+      non-IIIF source is actually ingested.
 - [x] Ground truth registered and **split fixed** (29 Jul 2026): 15,029 records,
       10,595 train / 4,434 hold-out, hash-deterministic rule, manifest hash committed —
       see `docs/ground-truth-split.md`. The verified asset is person-level; page-level

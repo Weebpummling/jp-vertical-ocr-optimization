@@ -39,7 +39,22 @@ def _get(url: str, *, timeout: int = 60) -> bytes:
 
 
 def manifest(pid: str) -> dict:
-    return json.loads(_get(MANIFEST_URL.format(pid=pid)).decode("utf-8"))
+    """Fetch the manifest, caching it beside the page images.
+
+    Manifests for these volumes run to hundreds of canvases; caching means the
+    region and page helpers cost NDL one manifest request per volume, ever.
+    """
+    try:
+        cache = data_home() / "cache" / pid / "manifest.json"
+    except SystemExit:
+        cache = None  # no data home (e.g. CI) — fetch without caching
+    if cache is not None and cache.exists():
+        return json.loads(cache.read_text(encoding="utf-8"))
+    man = json.loads(_get(MANIFEST_URL.format(pid=pid)).decode("utf-8"))
+    if cache is not None:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(man, ensure_ascii=False), encoding="utf-8")
+    return man
 
 
 def canvases(man: dict) -> list[dict]:
@@ -145,6 +160,42 @@ def fetch_page(pid: str, frame_no: int, *, out_dir: Path | None = None) -> Path:
     return dest
 
 
+def region_url(pid: str, frame_no: int, bbox: tuple[int, int, int, int]) -> str:
+    """IIIF Image API URL for a pixel region of a page — the re-checkable
+    provenance form that roster_cell.crop_url stores. Anyone with the URL can
+    see exactly the patch of page a value was read from.
+
+    bbox is (x, y, w, h) in full-resolution pixel coordinates.
+    """
+    man = manifest(pid)
+    cvs = {c["frame_no"]: c for c in canvases(man)}
+    if frame_no not in cvs:
+        raise SystemExit(f"frame {frame_no} not in manifest ({len(cvs)} canvases)")
+    service = cvs[frame_no]["service_id"]
+    if not service:
+        raise SystemExit(f"frame {frame_no} has no IIIF image service")
+    x, y, w, h = bbox
+    return f"{service}/{x},{y},{w},{h}/full/0/default.jpg"
+
+
+def fetch_region(pid: str, frame_no: int, bbox: tuple[int, int, int, int]) -> Path:
+    """Fetch one cell/region crop into the cache; skip if already cached."""
+    x, y, w, h = bbox
+    out_dir = data_home() / "cache" / pid / "regions"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"frame_{frame_no:04d}_{x}_{y}_{w}x{h}.jpg"
+    if dest.exists() and dest.stat().st_size > 0:
+        print(f"cached: {dest}", file=sys.stderr)
+        return dest
+    time.sleep(IMAGE_DELAY_S)
+    data = _get(region_url(pid, frame_no, bbox), timeout=120)
+    tmp = dest.with_suffix(".part")
+    tmp.write_bytes(data)
+    tmp.replace(dest)
+    print(f"fetched: {dest} ({len(data)} bytes)", file=sys.stderr)
+    return dest
+
+
 def main(argv: list[str]) -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", newline="\n")
@@ -152,6 +203,11 @@ def main(argv: list[str]) -> None:
         sys.stdout.write(register_sql(argv[1], manifest(argv[1])))
     elif len(argv) >= 3 and argv[0] == "fetch":
         fetch_page(argv[1], int(argv[2]))
+    elif len(argv) >= 7 and argv[0] == "region":
+        bbox = tuple(int(v) for v in argv[3:7])
+        print(region_url(argv[1], int(argv[2]), bbox))
+        if "--fetch" in argv:
+            fetch_region(argv[1], int(argv[2]), bbox)
     else:
         raise SystemExit(__doc__)
 
