@@ -68,6 +68,7 @@
       "name": "seniority_no",
       "band": [5, 6],
       "confirmed": true,
+      "evidence": "documentary",
       "maps_to": "observation.seniority_no",
       "note": "Arabic numerals, monotone ascending right-to-left within each branch+rank section (globally numbered, so sections start with gaps). The row anchor for audit — see roster_cell.seniority_no."
     },
@@ -75,6 +76,7 @@
       "name": "post",
       "band": [6, 7],
       "confirmed": true,
+      "evidence": "documentary",
       "maps_to": "observation.post",
       "note": "職名 — the assignment (e.g. 歩兵第四十二聯隊附, 陸軍兵器本廠附), with the posting date in smaller type at the foot of the cell. Tallest band."
     },
@@ -82,6 +84,7 @@
       "name": "court_rank_decorations",
       "band": [7, 8],
       "confirmed": true,
+      "evidence": "documentary",
       "maps_to": null,
       "note": "位階・勲等・功級 — e.g. 正六、旭六、瑞五 (Senior Sixth Rank; Rising Sun 6th; Sacred Treasure 5th). No observation column yet."
     },
@@ -89,6 +92,7 @@
       "name": "name_raw",
       "band": [8, 9],
       "confirmed": true,
+      "evidence": "documentary",
       "maps_to": "observation.name_raw",
       "note": "氏名 in large type with the birth date in smaller type alongside (e.g. 伊東武夫 / 明三〇、七、六). Transcription must separate the two; the band holds both."
     },
@@ -96,6 +100,7 @@
       "name": "cohort",
       "band": [9, 10],
       "confirmed": true,
+      "evidence": "documentary",
       "maps_to": null,
       "note": "陸軍士官学校 class number (期), e.g. 23. A Spike-D blocking key for linkage to the academy dataset."
     }
