@@ -11,6 +11,13 @@ Two fixed benchmark sets:
 - **Hand-transcribed engineering tables** — engine datasheets and weight/limit tables from the
   secondary corpus, measuring structured-table extraction on a second layout family.
 
+Experimental (not yet gating):
+
+- **Handwritten ensemble benchmark** — OCR (NDLOCR-Lite tegaki3) vs vision-LLM on Shōwa pen
+  handwriting: cost, throughput, and cross-engine agreement, pending human-verified truth.
+  First run: [`handwritten-ensemble-2026-07.md`](handwritten-ensemble-2026-07.md); scoring
+  script: [`ensemble_agreement.py`](ensemble_agreement.py).
+
 Ground-truth pages are **held out and re-served blind** to measure per-person and per-field
 accuracy for humans *and* every automated component.
 
