@@ -132,6 +132,61 @@ def _label_confirmation(templates: list[R.Template]) -> dict[str, dict[str, bool
     return out
 
 
+def vocabularies(vocab_dir: Path | None = None) -> dict:
+    """The frozen controlled vocabularies, shaped for autocomplete.
+
+    Ranks carry `seniority_order` so the form can offer them in service order
+    rather than alphabetically; `variants` are the printed forms that should
+    resolve to the same code, which is what lets an annotator type what is on
+    the page and get a normalized value. The variant table is deliberately
+    *not* a fold-everything map - 齋/斉 stay distinct (see data/vocab/README.md).
+    """
+    import csv
+    vocab_dir = vocab_dir or (Path(__file__).resolve().parent.parent / "data" / "vocab")
+
+    def rows(name):
+        path = vocab_dir / name
+        if not path.exists():
+            return []
+        with path.open(encoding="utf-8-sig", newline="") as fh:
+            return list(csv.DictReader(fh))
+
+    def split_variants(value):
+        # The vocab CSVs separate multiple printed forms with ';' (e.g.
+        # 野戦砲兵 -> "野戦砲;野砲兵"). Accept '|' and whitespace too rather than
+        # depend on one convention holding across future rows.
+        import re
+        return [v for v in re.split(r"[;|\s]+", value or "") if v]
+
+    ranks = [
+        {
+            "code": r["rank_code"],
+            "ja": r["label_ja"],
+            "en": r["label_en"],
+            "order": int(r["seniority_order"]) if r.get("seniority_order") else None,
+            "variants": split_variants(r.get("variants")),
+        }
+        for r in rows("rank.csv")
+    ]
+    branches = [
+        {
+            "code": b["branch_code"],
+            "ja": b["label_ja"],
+            "en": b["label_en"],
+            "category": b.get("category"),
+            "variants": split_variants(b.get("variants")),
+        }
+        for b in rows("branch.csv")
+    ]
+    variants = [
+        {"variant": v["variant_char"], "canonical": v["canonical_char"],
+         "note": v.get("note")}
+        for v in rows("kanji_variant.csv")
+    ]
+    ranks.sort(key=lambda r: (r["order"] is None, r["order"]))
+    return {"ranks": ranks, "branches": branches, "kanji_variants": variants}
+
+
 def register_image(image, pid: str, frame: int, *, panel: int = 0,
                    templates: list[R.Template] | None = None,
                    scale: float = R.SCALE,

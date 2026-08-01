@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, Response
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "app"))
@@ -62,6 +63,17 @@ def templates() -> dict:
     return {"templates": out}
 
 
+@app.get("/vocab")
+def vocab() -> dict:
+    """Controlled vocabularies for the entry form's autocomplete.
+
+    Frozen 31 Jul 2026 (11 ranks / 14 branches / 28 variants). Typing a printed
+    variant must resolve to the canonical code in a keystroke or two - that is
+    what keeps normalization from becoming a separate cleanup pass.
+    """
+    return ps.vocabularies()
+
+
 @app.get("/volumes/{pid}/pages/{frame}")
 def page(pid: str, frame: int,
          panel: int = Query(0, ge=0, description="0 = right-hand page"),
@@ -89,4 +101,71 @@ def page(pid: str, frame: int,
     except ps.PageNotRegistrable as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return registered.as_dict()
+    payload = registered.as_dict()
+    # The viewer needs the IIIF image service to build a tile source; the cell
+    # rectangles are in that service's full-resolution pixel space, so panning
+    # to a cell is a direct coordinate conversion with no extra lookup.
+    payload["iiif_service"] = _service_id(iiif_client, pid, frame)
+    return payload
+
+
+@app.get("/volumes/{pid}/pages/{frame}/image")
+def page_image(pid: str, frame: int) -> FileResponse:
+    """The cached page scan itself.
+
+    The workstation reads pixels from here, not from NDL. An annotator moving
+    cell to cell would otherwise generate a request per crop and a tile storm
+    per page; NDL answered exactly that pattern with HTTP 429 during
+    development. Retrieval stays where the politeness lives - one cached fetch
+    per page in `ingestion/iiif_client.py` - and everything downstream is local.
+
+    The public IIIF URL is still what `roster_cell.crop_url` records: provenance
+    points at the institution's copy, display comes from ours.
+    """
+    import iiif_client
+    try:
+        path = iiif_client.fetch_page(pid, frame)
+    except SystemExit as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"retrieval failed: {exc}") from exc
+    return FileResponse(path, media_type="image/jpeg")
+
+
+@app.get("/volumes/{pid}/pages/{frame}/region")
+def page_region(pid: str, frame: int,
+                x: int = Query(..., ge=0), y: int = Query(..., ge=0),
+                w: int = Query(..., gt=0), h: int = Query(..., gt=0)) -> Response:
+    """One rectangle of the cached page, as JPEG - the cell crop the UI shows."""
+    import cv2
+    import iiif_client
+    try:
+        path = iiif_client.fetch_page(pid, frame)
+    except SystemExit as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if image is None:
+        raise HTTPException(status_code=500, detail=f"unreadable page image: {path}")
+    ih, iw = image.shape[:2]
+    x0, y0 = min(x, iw - 1), min(y, ih - 1)
+    crop = image[y0:min(y0 + h, ih), x0:min(x0 + w, iw)]
+    if crop.size == 0:
+        raise HTTPException(status_code=422,
+                            detail=f"region ({x},{y},{w},{h}) is outside the page {iw}x{ih}")
+    ok, buf = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    if not ok:
+        raise HTTPException(status_code=500, detail="failed to encode region")
+    return Response(content=buf.tobytes(), media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+def _service_id(iiif_client, pid: str, frame: int) -> str | None:
+    try:
+        canvases = iiif_client.canvases(iiif_client.manifest(pid))
+    except Exception:
+        return None
+    for canvas in canvases:
+        if canvas.get("frame_no") == frame:
+            return canvas.get("service_id")
+    return None

@@ -1,0 +1,189 @@
+/* Workstation styling.
+ *
+ * One rule matters more than the rest: a machine suggestion must never be able
+ * to be mistaken for something a human confirmed. Confirmed values are plain
+ * dark text on white; anything machine-derived or provisional is tinted,
+ * dashed, or tagged. That visual independence is what makes later agreement
+ * between reader and machine statistically meaningful.
+ */
+
+:root {
+  --ink: #1a1a1a;
+  --muted: #6a6a6a;
+  --line: #d8d4cc;
+  --bg: #f7f5f1;
+  --accent: #2f5d8a;
+  --suspect: #a8541b;
+  --provisional: #7a5ba6;
+  --font-jp: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---- top bar ---- */
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+.topbar h1 { font: 600 1rem/1.2 var(--font-jp); margin: 0; }
+.loader { display: flex; align-items: center; gap: 0.6rem; }
+.loader label { display: flex; align-items: center; gap: 0.3rem; color: var(--muted); }
+.loader input { padding: 0.2rem 0.4rem; border: 1px solid var(--line); border-radius: 3px; }
+.loader button {
+  padding: 0.25rem 0.8rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.loader button:disabled { opacity: 0.5; cursor: default; }
+.status { margin: 0; color: var(--muted); display: flex; align-items: center; gap: 0.5rem; }
+.status code { color: var(--ink); }
+
+.error {
+  margin: 0;
+  padding: 0.8rem 1rem;
+  background: #fdf1ea;
+  border-bottom: 1px solid var(--suspect);
+  color: var(--suspect);
+}
+
+/* ---- three panes ---- */
+.panes {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr) minmax(260px, 0.8fr);
+  min-height: 0;
+}
+.pane {
+  border-left: 1px solid var(--line);
+  background: #fff;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.pane__head {
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: #fff;
+}
+.pane__head h2 { margin: 0; font-size: 0.95rem; }
+.pane__foot { margin-top: auto; padding: 0.8rem 0.9rem; border-top: 1px solid var(--line); }
+.keys { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.8rem; }
+kbd {
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 0.25rem;
+  font: 11px/1.4 ui-monospace, monospace;
+  background: #fafafa;
+}
+.muted { color: var(--muted); }
+
+/* ---- viewer ---- */
+.viewer { width: 100%; height: 100%; background: #2b2b2b; }
+.viewer--empty { display: grid; place-items: center; color: #ccc; }
+
+/* ---- entry form ---- */
+.fields { padding: 0.5rem 0.9rem 1rem; }
+.field { padding: 0.5rem 0.6rem; border-left: 3px solid transparent; border-radius: 3px; }
+.field--active { border-left-color: var(--accent); background: #f4f8fc; }
+.field--suspect { background: #fdf6f0; }
+.field label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: 600 0.85rem/1.4 var(--font-jp);
+  margin-bottom: 0.2rem;
+}
+.input {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: 1rem/1.4 var(--font-jp);
+  background: #fff;      /* confirmed values: plain, untinted */
+}
+.input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.input--unresolved { border-color: var(--suspect); background: #fffaf6; }
+
+.hint { margin: 0.2rem 0 0; font-size: 0.75rem; color: var(--muted); }
+.resolved { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--accent); }
+.resolved code { font-weight: 600; }
+.unresolved { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--suspect); }
+
+.tag {
+  font: 500 0.68rem/1.5 system-ui, sans-serif;
+  padding: 0 0.35rem;
+  border-radius: 2px;
+  border: 1px dashed currentColor;
+}
+.tag--provisional { color: var(--provisional); }
+.tag--suspect { color: var(--suspect); border-style: solid; }
+.tag--nocell { color: var(--muted); }
+
+.options {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+.options button {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.options button:hover { background: #f0f5fa; }
+.opt-ja { font: 1rem var(--font-jp); }
+.opt-en { color: var(--muted); font-size: 0.8rem; }
+.opt-var { margin-left: auto; color: var(--provisional); font: 0.85rem var(--font-jp); }
+
+/* ---- candidates ---- */
+.crop { padding: 0.7rem 0.9rem; text-align: center; }
+.crop img {
+  max-width: 100%;
+  max-height: 42vh;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.6rem;
+  margin: 0;
+  padding: 0 0.9rem 0.8rem;
+  font-size: 0.8rem;
+}
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; }
+
+.proposals { padding: 0.8rem 0.9rem; border-top: 1px dashed var(--line); }
+.proposals h3 { margin: 0 0 0.3rem; font-size: 0.85rem; }
+.proposals p { margin: 0; font-size: 0.8rem; }

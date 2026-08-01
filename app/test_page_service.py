@@ -133,6 +133,43 @@ class ShippedTemplateLabellingTests(unittest.TestCase):
         self.assertTrue(table["showa-teinen-meibo-A"]["seniority_no"])
 
 
+class VocabularyTests(unittest.TestCase):
+    """The entry form's autocomplete is only as good as this shaping."""
+
+    def setUp(self):
+        self.vocab = PS.vocabularies()
+
+    def test_frozen_counts(self):
+        # Frozen 31 Jul 2026: 11 ranks / 14 branches / 28 variants.
+        self.assertEqual(len(self.vocab["ranks"]), 11)
+        self.assertEqual(len(self.vocab["branches"]), 14)
+        self.assertEqual(len(self.vocab["kanji_variants"]), 28)
+
+    def test_ranks_come_back_in_service_order(self):
+        """Not alphabetical: a rank list an officer would recognise."""
+        labels = [r["ja"] for r in self.vocab["ranks"]]
+        self.assertEqual(labels[0], "准尉")
+        self.assertEqual(labels[-1], "元帥")
+        orders = [r["order"] for r in self.vocab["ranks"] if r["order"] is not None]
+        self.assertEqual(orders, sorted(orders))
+
+    def test_multiple_printed_forms_split_apart(self):
+        """The CSVs separate variants with ';'.
+
+        Regression: treating the field as a single token made 野戦砲兵 carry the
+        literal variant "野戦砲;野砲兵", so neither printed form would ever match
+        and an annotator typing what is on the page would be told it is not in
+        the vocabulary.
+        """
+        by_label = {b["ja"]: b for b in self.vocab["branches"]}
+        self.assertEqual(by_label["野戦砲兵"]["variants"], ["野戦砲", "野砲兵"])
+        self.assertEqual(by_label["歩兵"]["variants"], ["步兵"])
+        for entry in self.vocab["branches"] + self.vocab["ranks"]:
+            for variant in entry["variants"]:
+                self.assertNotIn(";", variant)
+                self.assertTrue(variant.strip())
+
+
 class RealPageIntegrationTests(unittest.TestCase):
     """Local-only: exercises the shipped template against an actual scan."""
 

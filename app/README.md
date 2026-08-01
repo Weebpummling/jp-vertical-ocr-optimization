@@ -54,8 +54,50 @@ Two behaviours worth knowing before building against it:
   an interpolated column ruling or an unmatched band. Render those cells as
   needing attention rather than presenting a confident crop.
 
+| `GET /volumes/{pid}/pages/{frame}/image` | The cached page scan, for the viewer |
+| `GET /volumes/{pid}/pages/{frame}/region?x&y&w&h` | One rectangle of it, as JPEG — the cell crops |
+
+**Pixels come from our cache, never from the institution.** An annotator
+stepping cell to cell would otherwise fire a request at NDL per crop and a tile
+storm per page — which is exactly what returned HTTP 429 during development.
+Retrieval stays where the politeness lives (one cached fetch per page in
+`ingestion/iiif_client.py`); everything the workstation renders is local, so
+transcription keeps working with no network at all. A cell's `crop_url` still
+points at the public IIIF copy: that is provenance, not the display path.
+
+## The UI
+
+`ui/` — React + OpenSeadragon over Vite, per the stack above.
+
+```bash
+uvicorn app.api:app --reload --port 8000   # terminal 1, from the repo root
+npm --prefix app/ui run dev                # terminal 2 → http://localhost:5173
+```
+
+Vite proxies `/api` to the FastAPI core, so the browser stays same-origin and
+there is no CORS configuration to get wrong.
+
+What works: all three panes against a real volume, officer and field navigation
+by keyboard, the viewer auto-centring on the current cell, controlled-vocabulary
+autocomplete that resolves printed variants (步兵 → `hohei`), and provisional
+labels and inferred-edge cells tagged distinctly.
+
+Two behaviours worth keeping when this grows:
+
+- **The IME owns Enter and Escape while it is composing.** Every key handler
+  checks `isComposing` before acting; advancing a field mid-conversion is the
+  classic way a Japanese entry form becomes unusable. Verified in a browser,
+  not just in principle.
+- **A near-miss on the vocabulary is flagged, never normalised.** Typing 歩 does
+  not quietly become 歩兵.
+
 ## Not built yet
 
-The three panes themselves, and the whole write side. Creating observations
-touches audited tables and no code path may author a value without a human
-behind it, so those endpoints land together with authentication.
+The write side. Creating observations touches audited tables and no code path
+may author a value without a human behind it, so those endpoints land together
+with authentication — until then the form holds values in memory only.
+
+Also outstanding from `app/README`'s non-negotiables: the difficult-character
+toolkit (variant palette, radical/IDS lookup, attach-the-glyph), furigana and
+per-character uncertainty capture, and the seal/damage flag. The candidate pane
+is a styled placeholder until Layer 4 produces proposals.
