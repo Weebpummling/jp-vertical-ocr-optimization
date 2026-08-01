@@ -156,7 +156,14 @@ the observed officers/hour recorded as the baseline all later phases are judged 
 - [ ] Difficult-character toolkit: variant palette (kyūjitai↔shinjitai), radical/IDS
       lookup, and attach-the-cropped-glyph so an unreadable character never blocks a record.
 - [ ] Per-character uncertainty capture; one-click seal/damage flag → alt-scan flip.
-- [ ] First Shōwa seniority-list template, productionized from Spike C's hand-built grid.
+- [x] First Shōwa seniority-list template, productionized from Spike C's hand-built grid
+      (`templates/showa-teinen-meibo-A.json` + `reading/registration.py`): 12-band grid
+      derived from 7 panels of pid 1449426, page classification with three measured gates
+      (index and degraded pages reject), officer strips and per-field rectangles emitted in
+      original-scan pixels for `roster_cell.crop_bbox` / IIIF region URLs. Verified end to
+      end against the scan — cells land on seniority 915/916, 平岩棟一/乾忠夫, cohorts 25/22.
+      Five fields confirmed against the page; the four upper date rows are geometry-only and
+      await the lead's naming.
 - [ ] Suggestions rendered visually distinct from confirmed values — human independence is
       what makes machine agreement statistically meaningful.
 

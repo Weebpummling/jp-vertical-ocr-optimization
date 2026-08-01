@@ -1,0 +1,104 @@
+{
+  "template_id": "showa-teinen-meibo-A",
+  "layout_family": "showa_seniority_main",
+  "series": "active",
+  "era": "showa",
+  "description": "Main roster table of the Shōwa 現役将校実役停年名簿. Officers run right-to-left as vertical column strips; the eleven horizontal bands are the field rows. Sections are headed by branch+rank (e.g. 歩兵大佐) printed in the outer margin, so a page may contain the tail of one section and the head of the next.",
+
+  "provenance": {
+    "derived_from_pid": "1449426",
+    "edition": "昭和8年9月1日調",
+    "frames_sampled": [60, 100, 300, 500, 700, 850],
+    "panels_used": 7,
+    "method": "Ruling positions detected per panel (reading/registration.py), pooled as fractions of table height, clustered at 0.015 and kept where support >= 60% of panels; band = cluster median. Frame 850 (索引) and frame 700 panel 1 were excluded as non-main layouts and serve as negative controls.",
+    "derived_on": "2026-07-31",
+    "seeded_by": "docs/spikes/spike-c-registration.md"
+  },
+
+  "band_fracs": [0.0, 0.0968, 0.186, 0.2593, 0.3317, 0.4056, 0.4327, 0.6219, 0.7233, 0.9115, 0.9414, 1.0],
+
+  "match": {
+    "tolerance_frac": 0.015,
+    "min_bands_matched": 10,
+    "min_explained_frac": 0.8,
+    "min_columns": 2,
+    "note": "Three gates. min_bands_matched: main-layout panels detect 11-12 of the 12 bands, index pages far fewer (Spike C); two misses are tolerated because thin rulings drop out on degraded panels. min_explained_frac: the reverse direction — measured 92-100% on true main panels versus 46-71% on index and degraded panels, so 0.8 sits in a wide gap and rejects over-detected pages that would otherwise match 12/12 by chance. min_columns: without interior vertical rulings no officer strip can be cut, so the page is a human task, not a registration."
+  },
+
+  "columns": {
+    "expected": 10,
+    "direction": "rtl",
+    "note": "Nominal count only, never a gate: a page ending one branch+rank section and starting another carries fewer full columns. Officer index 0 is the rightmost strip."
+  },
+
+  "fields": [
+    {
+      "name": "date_row_1",
+      "band": [1, 2],
+      "confirmed": false,
+      "maps_to": null,
+      "note": "UNCONFIRMED. Almost entirely 同 (ditto) across the section; the rightmost cell of the sampled page reads 〇、一、一. Not obviously a date. Needs the lead's reading against a printed section header before it is given a real name."
+    },
+    {
+      "name": "date_row_2",
+      "band": [2, 3],
+      "confirmed": false,
+      "maps_to": null,
+      "note": "UNCONFIRMED. Also almost entirely 同; rightmost cell reads 昭八、一 (Shōwa 8, 1) — a value shared across the section rather than per-officer."
+    },
+    {
+      "name": "rank_date",
+      "band": [3, 4],
+      "confirmed": false,
+      "maps_to": null,
+      "note": "PROVISIONAL. Recent dates (昭和3-8, 大正15) varying per officer — consistent with appointment to the officer's current rank, i.e. the seniority basis for this section. No observation column exists for it yet."
+    },
+    {
+      "name": "commissioning_date",
+      "band": [4, 5],
+      "confirmed": false,
+      "maps_to": "observation.commissioning_date",
+      "note": "PROVISIONAL but well supported. Early dates (明治41-44, 大正1-3) — roughly 25 years before the volume, consistent with first commissioning (任官年月日), which is the schema's single date column."
+    },
+    {
+      "name": "seniority_no",
+      "band": [5, 6],
+      "confirmed": true,
+      "maps_to": "observation.seniority_no",
+      "note": "Arabic numerals, monotone ascending right-to-left within each branch+rank section (globally numbered, so sections start with gaps). The row anchor for audit — see roster_cell.seniority_no."
+    },
+    {
+      "name": "post",
+      "band": [6, 7],
+      "confirmed": true,
+      "maps_to": "observation.post",
+      "note": "職名 — the assignment (e.g. 歩兵第四十二聯隊附, 陸軍兵器本廠附), with the posting date in smaller type at the foot of the cell. Tallest band."
+    },
+    {
+      "name": "court_rank_decorations",
+      "band": [7, 8],
+      "confirmed": true,
+      "maps_to": null,
+      "note": "位階・勲等・功級 — e.g. 正六、旭六、瑞五 (Senior Sixth Rank; Rising Sun 6th; Sacred Treasure 5th). No observation column yet."
+    },
+    {
+      "name": "name_raw",
+      "band": [8, 9],
+      "confirmed": true,
+      "maps_to": "observation.name_raw",
+      "note": "氏名 in large type with the birth date in smaller type alongside (e.g. 伊東武夫 / 明三〇、七、六). Transcription must separate the two; the band holds both."
+    },
+    {
+      "name": "cohort",
+      "band": [9, 10],
+      "confirmed": true,
+      "maps_to": null,
+      "note": "陸軍士官学校 class number (期), e.g. 23. A Spike-D blocking key for linkage to the academy dataset."
+    }
+  ],
+
+  "unassigned_bands": [
+    {"band": [0, 1], "note": "Top margin above the table rule — no field."},
+    {"band": [10, 11], "note": "Bottom margin — no field. Page number sits outside the table in the outer margin."}
+  ]
+}

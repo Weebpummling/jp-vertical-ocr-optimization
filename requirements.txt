@@ -1,0 +1,6 @@
+# Runtime dependencies for the reading layer (structure registration).
+#
+# Headless OpenCV: the pipeline never opens a window, and the GUI build drags in
+# system libraries CI does not have.
+opencv-python-headless>=4.8
+numpy>=1.26
