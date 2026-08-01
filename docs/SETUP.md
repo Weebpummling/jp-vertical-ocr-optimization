@@ -21,7 +21,7 @@ cd jp-vertical-ocr-optimization
 1. Copy `.env.example` to `.env`; set a real `POSTGRES_PASSWORD` and point
    `JP_OCR_DATA` at the machine's private data home (create it per
    `docs/data-home.md` — the same layout as on the lead's machine, populated from the
-   personal-cloud snapshot).
+   shared project copies).
 2. Start the database:
 
 ```bash
@@ -64,5 +64,5 @@ Used by: `benchmarks/register_reference_truth.py` (ground-truth registration),
 | Concern | Machine |
 |---|---|
 | PostgreSQL + (Phase 1) API + workstation | Home machine (Docker) |
-| Private data home (`JP_OCR_DATA`) master copy | Lead's machine, mirrored to personal cloud |
+| Private data home (`JP_OCR_DATA`) master copy | Lead's machine; copies distributed via daily file-sharing |
 | Repo development, NDL retrieval, experiments | Any — everything hits public NDL endpoints politely |
