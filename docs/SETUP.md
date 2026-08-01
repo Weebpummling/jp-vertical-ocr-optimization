@@ -42,9 +42,8 @@ docker exec jpocr-db psql -U jpocr -d jpocr -c "\dt"
 
 - Windows: schedule `scripts/backup.ps1` daily — the `schtasks` one-liner is in the
   script header. It dumps, self-verifies, and keeps 14 days.
-- Mirror `%JP_OCR_DATA%\backups` to the personal cloud folder. If the cloud provider's
-  desktop sync client is installed, the simplest reliable mirror is making `backups\`
-  a synced folder — no extra tooling.
+- Offsite mirroring removed by the lead's decision (31 Jul 2026): daily
+  file-sharing among project users distributes copies.
 - **Test one restore** before Phase 1 exits:
   `docker exec -i jpocr-db psql -U jpocr -d jpocr_restore_test < backups\<dump>.sql`
 
