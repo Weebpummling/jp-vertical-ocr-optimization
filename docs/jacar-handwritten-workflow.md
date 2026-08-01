@@ -80,4 +80,4 @@ with frame references intact, render with `scripts/translation_docx.ps1`
 | Ref | Title | State |
 |---|---|---|
 | C14030374300 | 南天門 東矢大隊の夜間攻撃 (1935 lecture, 31 imgs, handwritten) | **Done** — vision transcription + reviewed EN translation (offsite; files in Downloads) |
-| C14030562600 | 髑髏隊ヲ語ル 歩32-3 (1933/34, 31 imgs, handwritten + cover art) | Source PDF retrieved; NDLOCR-Lite pass done; **vision reading + ensemble + translation pending** |
+| C14030562600 | 髑髏隊ヲ語ル 歩32-3 (1933/34, 31 imgs, handwritten + cover art) | **Done (31 Jul 2026)** — full pipeline run: NDLOCR-Lite pass + independent vision reading (4-way parallel), per-page engine-agreement appendix, EN translation rendered to docx via `translation_docx.ps1`. Files in Downloads (`C14030562600_*`); first end-to-end validation of this workflow |
