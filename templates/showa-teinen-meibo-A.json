@@ -35,30 +35,34 @@
     {
       "name": "service_in_rank",
       "band": [1, 2],
-      "confirmed": false,
+      "confirmed": true,
+      "evidence": "documentary",
       "maps_to": null,
-      "note": "PROVISIONAL — 実役停年, elapsed service in the current rank as 年・月・日 (not a date). Evidence: 砲兵少尉 section reads 一、一〇、七; those officers were appointed 昭和6年10月26日 (band [2,3]) and the volume is 昭和8年9月1日調, an interval of 1y 10m ~6d. 歩兵大佐 section reads 〇、一、一 against an appointment two months before the 調 date. This is the quantity the volume is named for (実役停年名簿). Dittoed section-wide because it is a function of the shared appointment date."
+      "note": "実役停年 — elapsed service in the current rank as 年・月・日. NOT a date: do not parse with reading/eradate.py. Derived from band [2,3] and the volume's 調 date: the 砲兵少尉 section reads 一、一〇、七 against an appointment of 昭和6年10月26日 and a 調 date of 昭和8年9月1日 (1y 10m ~6d); the 歩兵大佐 section reads 〇、一、一. Dittoed section-wide because it is a function of the shared appointment date. Confirmed by the lead 1 Aug 2026."
     },
     {
       "name": "rank_date",
       "band": [2, 3],
-      "confirmed": false,
+      "confirmed": true,
+      "evidence": "documentary",
       "maps_to": null,
-      "note": "PROVISIONAL — date of appointment to the officer's current rank, the seniority basis for the section. Evidence: the 砲兵少尉 (cohort 43) section reads 昭和6年10月26日, which is exactly the 43rd 士官候補生 class date printed in the volume's own front matter (frame 9). Dittoed section-wide where a cohort was promoted together. No observation column exists for it yet."
+      "note": "現階級任官年月日 — appointment to the officer's current rank; the seniority basis for the section. The 砲兵少尉 (cohort 43) section reads 昭和6年10月26日, exactly the 43rd 士官候補生 class date printed in the volume's own front matter (frame 9). Dittoed section-wide where a cohort was promoted together. No observation column exists for it yet. Confirmed by the lead 1 Aug 2026."
     },
     {
       "name": "prev_rank_date",
       "band": [3, 4],
-      "confirmed": false,
+      "confirmed": true,
+      "evidence": "inferred",
       "maps_to": null,
-      "note": "PROVISIONAL and the weakest of the four — appointment to the PREVIOUS rank. Evidence is structural rather than direct: per-officer 昭和-era dates in the 歩兵大佐 section, and entirely blank in the 少尉 section, which is what a previous-rank column must look like for officers who have never been promoted. No observation column exists for it yet."
+      "note": "前階級任官年月日 — appointment to the PREVIOUS rank. Accepted by the lead on review 1 Aug 2026, but on STRUCTURAL INFERENCE ONLY: per-officer 昭和-era dates in the 歩兵大佐 section and entirely blank in the 少尉 section, which is how a previous-rank column must look for officers never promoted. No printed legend defines it and no cross-check was found; 補職年月日 remains a possible alternative. This is the field to revisit first if a contradicting record turns up — its provenance is weaker than the other three."
     },
     {
       "name": "commissioning_date",
       "band": [4, 5],
-      "confirmed": false,
+      "confirmed": true,
+      "evidence": "documentary",
       "maps_to": "observation.commissioning_date",
-      "note": "PROVISIONAL, well supported — 少尉任官年月日, first commissioning, i.e. the schema's 任官年月日. Evidence: within the 歩兵大佐 section the value tracks the cohort field exactly (cohort 22 → 明43.12.26, cohort 23 → 明44.12.26, and officers sharing a cohort carry 同), matching the ~one-class-per-year cadence of the front-matter class table. Blank in the 少尉 section because there it would merely repeat band [2,3]."
+      "note": "少尉任官年月日 — first commissioning; the schema's 任官年月日. Within the 歩兵大佐 section the value tracks the cohort field exactly (cohort 22 → 明43.12.26, cohort 23 → 明44.12.26, ties printed as 同), matching the one-class-per-year cadence of the front-matter class table. Blank in the 少尉 section, where it would merely repeat band [2,3]. Confirmed by the lead 1 Aug 2026."
     },
     {
       "name": "seniority_no",

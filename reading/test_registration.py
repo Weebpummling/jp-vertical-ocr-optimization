@@ -252,6 +252,26 @@ class ShippedTemplateTests(unittest.TestCase):
             self.assertLessEqual(t.min_bands_matched, len(t.band_fracs))
             self.assertGreaterEqual(t.min_columns, 2)
 
+    def test_every_field_declares_its_provenance(self):
+        """A field name is a reading decision, so it must say who backs it.
+
+        `confirmed` records that a human settled the label; `evidence` records
+        whether it rests on something printed in the source ("documentary") or
+        on inference a later reader may want to retest ("inferred"). Losing that
+        distinction would let a guess harden into an apparent fact.
+        """
+        import json
+        from pathlib import Path
+        for path in Path(self.dir).glob("*.json"):
+            spec = json.loads(path.read_text(encoding="utf-8"))
+            for field in spec.get("fields", []):
+                where = f"{path.name}:{field['name']}"
+                self.assertIn("confirmed", field, where)
+                self.assertTrue(field.get("note"), f"{where} has no note")
+                if field["confirmed"]:
+                    self.assertIn(field.get("evidence"), ("documentary", "inferred"),
+                                  f"{where} is confirmed but declares no evidence basis")
+
 
 if __name__ == "__main__":
     unittest.main()

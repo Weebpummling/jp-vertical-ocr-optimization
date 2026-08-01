@@ -1,9 +1,15 @@
 # Decision needed — naming the four date rows of `showa-teinen-meibo-A`
 
-**Status: open, awaiting the lead.** Raised 1 Aug 2026.
-**Blocks:** nothing yet. The geometry is finished and correct; only the semantic
-labels are unsettled, and changing one is a JSON edit in
-`templates/showa-teinen-meibo-A.json` — no code change, no re-derivation.
+**Status: RESOLVED 1 Aug 2026.** Raised and settled the same day: the lead
+reviewed the evidence below and accepted all four proposed names. All nine
+fields of `showa-teinen-meibo-A` are now `confirmed: true`.
+
+One qualification is recorded in the artifact rather than dropped. Three of the
+four are backed by documentary evidence from the volume itself and carry
+`"evidence": "documentary"`. Band `[3,4]` (`prev_rank_date`) rests on structural
+inference only — no printed legend defines it — and carries
+`"evidence": "inferred"`. It is the field to revisit first if a contradicting
+record appears; 補職年月日 remains a live alternative.
 
 ## What is already settled
 
@@ -43,21 +49,20 @@ Three independent cross-checks, all from the volume itself:
 
 ## The four decisions
 
-| # | Band | Proposed name | Reading | Confidence |
+| # | Band | Name (accepted) | Reading | Basis |
 |---|---|---|---|---|
-| 1 | `[1,2]` | `service_in_rank` | 実役停年 — elapsed service in current rank, 年・月・日 | High — arithmetic checks out on both sections |
-| 2 | `[2,3]` | `rank_date` | 現階級任官年月日 — appointment to current rank | High — matches the front-matter class date exactly |
-| 3 | `[3,4]` | `prev_rank_date` | 前階級任官年月日 — appointment to previous rank | **Low** — structural inference only |
-| 4 | `[4,5]` | `commissioning_date` | 少尉任官年月日 — first commissioning | High — tracks cohort, and is the schema's 任官年月日 |
+| 1 | `[1,2]` | `service_in_rank` | 実役停年 — elapsed service in current rank, 年・月・日 | Documentary — arithmetic checks out on both sections |
+| 2 | `[2,3]` | `rank_date` | 現階級任官年月日 — appointment to current rank | Documentary — matches the front-matter class date exactly |
+| 3 | `[3,4]` | `prev_rank_date` | 前階級任官年月日 — appointment to previous rank | **Inferred** — structural only |
+| 4 | `[4,5]` | `commissioning_date` | 少尉任官年月日 — first commissioning | Documentary — tracks cohort; the schema's 任官年月日 |
 
-**Item 3 is the one that really needs you.** The argument is only that the
-column is per-officer, 昭和-era, and empty for officers who have never been
-promoted — consistent with a previous-rank column, but I found no printed
-legend defining it, and I could not reliably resolve the stacked digits to test
-it against a known promotion. It could equally be 補職年月日 or another
-service date.
+Item 3 was the weak one. The argument is only that the column is per-officer,
+昭和-era, and empty for officers who have never been promoted — consistent with
+a previous-rank column, but no printed legend defines it and the stacked digits
+could not be resolved reliably enough to test against a known promotion. It
+could equally be 補職年月日. Accepted on review; flagged in the artifact.
 
-Two consequences worth noting when you decide:
+Two consequences that follow from the decision:
 
 - **`service_in_rank` is not a date.** If confirmed, it should not be parsed by
   `reading/eradate.py`; it needs a duration parser instead.
