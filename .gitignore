@@ -72,3 +72,9 @@ build/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# A Windows JP_OCR_DATA whose backslashes get eaten (e.g. by `eval` on a .env
+# line) becomes a relative path, and the data home materialises inside the repo.
+# Belt and braces: never track it if that happens again.
+/Users*/
+/C:*/
