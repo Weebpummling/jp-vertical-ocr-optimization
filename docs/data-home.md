@@ -21,7 +21,8 @@ Rules:
 - Nothing in this tree is ever committed, uploaded, or published as a side effect.
   Public artifacts about it are limited to hashes and aggregate counts (see
   `docs/ground-truth-split.md`).
-- Off-machine backup: the lead's personal cloud storage. The destination itself is
-  configured privately on the lead's machine and is deliberately not documented here.
+- Backup: local nightly dumps plus the external-SSD snapshot. Offsite mirroring
+  was removed by the lead's decision (31 Jul 2026) -- daily file-sharing among
+  project users distributes copies.
 - Integrity anchor: `academy\cohorts_output.xlsx` SHA-256
   `dccb9dff01009676fab7bd92bd004215583a5807855105b6dacfe2fa7355d7e5`.

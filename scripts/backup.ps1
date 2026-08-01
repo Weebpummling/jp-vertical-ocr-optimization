@@ -6,8 +6,9 @@
 # Schedule (daily 02:00) once and forget:
 #   schtasks /Create /TN "jpocr-backup" /SC DAILY /ST 02:00 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\backup.ps1"
 #
-# Off-machine copy: mirror the backups folder to the lead's personal cloud storage
-# (destination configured privately on the lead's machine; see docs/data-home.md).
+# Offsite mirroring removed by the lead's decision (31 Jul 2026): daily
+# file-sharing among project users distributes copies; local dumps + the
+# external-SSD snapshot are the backup.
 
 $ErrorActionPreference = "Stop"
 $dataHome = $env:JP_OCR_DATA

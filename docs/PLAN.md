@@ -101,8 +101,8 @@ train/hold-out split fixed; all four spikes have written answers.
       loaded and three volumes registered.
 - [x] **Backups:** `scripts/backup.ps1` scheduled daily 02:00 (byte-exact dump via
       docker cp, Japanese-sentinel corruption check, 14-day rotation; restore
-      round-trip verified). The 03:00 irreplaceables snapshot mirrors off-machine
-      to the lead's cloud storage with hash verification at both ends.
+      round-trip verified). The 03:00 irreplaceables snapshot targets the
+      external SSD. Offsite mirroring removed by the lead (31 Jul 2026).
 - [x] Audit logging wired as Postgres triggers (not app-layer) so no write path can
       bypass it — full before/after images, append-only log, TRUNCATE refused;
       guarantees asserted by `db/audit_check.sql` in CI on every push.
@@ -285,7 +285,7 @@ Settled with the project lead, 29 July 2026.
 | # | Decision | Answer | Consequences |
 |---|---|---|---|
 | 1 | **VLM choice** | Deferred pending analysis — see `docs/vlm-selection.md`; final call after a bake-off on Spike C pages | Lead's machine has **no discrete GPU** (integrated graphics, 16 GB RAM), so fine-tuning happens on a rented GPU; local inference means a small quantized model on CPU, or hosted inference |
-| 2 | **Hosting** | Lead's personal machine; a small hosted VM is acceptable later if workflow needs it | Single personal machine = single point of failure → the off-machine backup in Phase 0 is mandatory, not optional. Docker Compose targets the local machine first |
+| 2 | **Hosting** | Lead's personal machine; a small hosted VM is acceptable later if workflow needs it | Docker Compose targets the local machine. **Superseded 31 Jul 2026 (lead):** the offsite-backup requirement is removed — sync friction outweighed it, and daily file-sharing among users distributes copies. Backups are local dumps + the external-SSD snapshot |
 | 3 | **Team** | Two people (lead + one contributor) while the structure is built; undergraduate annotators join for the labor phase once it's ready | Reviewer ≠ author is still enforceable between two people. The workstation must be built for later multi-user onboarding (auth, per-user audit) even though it starts with two accounts. Undergrad-facing UX simplicity becomes a Phase-1 design criterion, not a nice-to-have |
 | 4 | **Private data home** | Lead's personal machine, outside this repo's working tree | Fixed local path convention, documented in `docs/`; included in the off-machine backup; never referenced by absolute path from committed code |
 | 5 | **Academy dataset** | Lead provides it personally | Spike D reduces to a handoff: get the file, confirm the blocking keys (name + commissioning date/cohort + branch) |
@@ -319,7 +319,7 @@ still mined so attrition across the gap is explained, never silent.
 | Silent incompleteness — officers missing from the panel without anyone noticing | Coverage-vs-worklist metric; seniority-anchor auditing; explained exits via Kanpō |
 | Drift back to bottom-up detection / crop-tuning | Architectural commitment above; no per-page self-improving detector |
 | VLM/OCR hallucination on vertical names — silent and plausible | Proposal-only role; dual-engine agreement; ground-truth fine-tuning and measurement |
-| **Database loss destroys human labor** — transcription hours are the costliest asset and all live in one Postgres | Nightly `pg_dump` + off-machine copy from day 1; restore tested before Phase 1 exits |
+| **Database loss destroys human labor** — transcription hours are the costliest asset and all live in one Postgres | Nightly `pg_dump` + external-SSD snapshot; restore tested. Accepted residual risk (lead, 31 Jul 2026): no offsite copy — a site-loss event relies on daily shared copies among users |
 | Template registration fails on degraded real pages (the design's load-bearing bet) | Spike C proves it on real scans, including damaged pages, before build-weeks are committed |
 | Kanpō full text patchy for parts of 1922–1937 | Spike A measures coverage first; weak years get scoped OCR, planned rather than discovered |
 | NDL/JACAR rate limits or terms constrain bulk retrieval | Spike B surfaces limits; local cache/mirror + politeness layer if needed |
