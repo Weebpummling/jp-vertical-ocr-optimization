@@ -25,7 +25,11 @@ ERA_NAMES = {"明治": "明", "大正": "大", "昭和": "昭"}
 
 DIGITS = {"〇": 0, "一": 1, "二": 2, "三": 3, "四": 4,
           "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
-SEPARATORS = "、,，. ・"
+# 年/月/日 are separators too, not content: the roster columns use the terse
+# juxtaposed form (昭三三、八、二) but the same date is written out in full
+# (昭和8年9月1日) in volume titles and the front matter, and both must parse to
+# the same day. A trailing 日 just yields an empty final part, which is dropped.
+SEPARATORS = "、,，. ・年月日"
 
 
 @dataclass(frozen=True)

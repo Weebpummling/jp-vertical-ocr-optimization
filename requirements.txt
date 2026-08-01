@@ -9,3 +9,6 @@ numpy>=1.26
 # framework-free so its logic is testable without a server.
 fastapi>=0.115
 uvicorn>=0.30
+
+# Write side (app/db.py). The workstation reads and writes the audited core.
+psycopg[binary]>=3.2

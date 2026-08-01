@@ -91,13 +91,59 @@ Two behaviours worth keeping when this grows:
 - **A near-miss on the vocabulary is flagged, never normalised.** Typing 歩 does
   not quietly become 歩兵.
 
+## The write side
+
+| Endpoint | Does |
+|---|---|
+| `GET /whoami` | Resolve the caller's `X-Annotator` header to an `app_user` |
+| `POST /volumes/{pid}/pages/{frame}/cells` | Persist the page's officer geometry as `roster_cell` rows (idempotent per `row_index`) |
+| `POST /volumes/{pid}/pages/{frame}/observations` | Record one officer as a human read them |
+| `GET /volumes/{pid}/pages/{frame}/observations` | What has been recorded for a page |
+
+Three rules are enforced rather than documented:
+
+- **Every write is attributed.** `app/db.py` only writes inside
+  `actor_session()`, which sets `app.user_id` in the same transaction, because
+  the audit triggers read the actor from there — a write that skips it lands in
+  `audit_log` with a NULL actor. A test asserts both halves of that.
+- **Observations are always `draft`.** Confirmation is a separate, deliberate
+  act, and `author_user_id` comes from the authenticated user, never the body.
+- **An unclear date is refused, not guessed.** `commissioning_date` is submitted
+  as the reading exactly as printed (明四三、一二、二六 or 明治43年12月26日);
+  the server normalizes with `reading/eradate.py`. If it cannot resolve the
+  reading, the observation still saves with **no date** and the refusal reason
+  recorded in `field_confidence`, so a bad value never enters the panel dressed
+  as a good one.
+
+> ⚠ **Identification, not authentication.** `app_user` in the frozen schema has
+> no credential column, so the header proves nothing. Keep the API on
+> `127.0.0.1` and read `audit_log.actor` as "the login the client claimed" until
+> [docs/decision-workstation-auth.md](../docs/decision-workstation-auth.md) is
+> settled.
+
+Setup, once:
+
+```bash
+docker compose up -d                                   # Postgres
+python ingestion/iiif_client.py register <pid> | psql   # register a volume
+python scripts/backfill_edition_dates.py --apply        # observations need as_of_date
+```
+
+Creating the first user is a bootstrap (nothing exists to attribute it to, so
+the audit log records a NULL actor by design):
+
+```sql
+INSERT INTO app_user (login, display_name, role) VALUES ('you','Your Name','annotator');
+```
+
 ## Not built yet
 
-The write side. Creating observations touches audited tables and no code path
-may author a value without a human behind it, so those endpoints land together
-with authentication — until then the form holds values in memory only.
+The UI does not call the write endpoints — the form still holds values in
+memory. Wiring it up is small; it waits on the auth decision so annotators are
+not trained against a login that is about to change.
 
-Also outstanding from `app/README`'s non-negotiables: the difficult-character
-toolkit (variant palette, radical/IDS lookup, attach-the-glyph), furigana and
+Also outstanding from the non-negotiables above: the difficult-character toolkit
+(variant palette, radical/IDS lookup, attach-the-glyph), furigana and
 per-character uncertainty capture, and the seal/damage flag. The candidate pane
-is a styled placeholder until Layer 4 produces proposals.
+is a styled placeholder until Layer 4 produces proposals. Nothing enforces
+`app_user.role` yet, so reviewer ≠ author is advisory.

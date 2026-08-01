@@ -18,19 +18,50 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "app"))
 sys.path.insert(0, str(ROOT / "ingestion"))
+sys.path.insert(0, str(ROOT / "reading"))
 
 import page_service as ps  # noqa: E402
+import db  # noqa: E402
+import eradate  # noqa: E402
 
 app = FastAPI(
     title="jp-vertical-ocr-optimization workstation",
     description="Read-side API for the transcription workstation (Layer 3).",
 )
+
+
+# --------------------------------------------------------------------------
+# identity
+# --------------------------------------------------------------------------
+#
+# ⚠ This identifies the annotator; it does not authenticate them. `app_user` in
+# the frozen schema has no credential column, so there is nothing to verify a
+# password against, and inventing one here would mean a unilateral migration of
+# an audited table. A header is honest for the current deployment - one
+# workstation on the lead's machine, bound to 127.0.0.1 - and is deliberately
+# not sufficient for the multi-user phase. See docs/decision-workstation-auth.md.
+
+def current_user(x_annotator: str | None = Header(default=None)) -> dict:
+    """Resolve the X-Annotator header to an app_user row, or refuse."""
+    if not x_annotator:
+        raise HTTPException(status_code=401, detail="X-Annotator header required")
+    user = db.find_user(x_annotator)
+    if not user:
+        raise HTTPException(status_code=401, detail=f"unknown annotator {x_annotator!r}")
+    return user
+
+
+@app.get("/whoami")
+def whoami(user: dict = Depends(current_user)) -> dict:
+    return {"login": user["login"], "display_name": user["display_name"],
+            "role": user["role"]}
 
 
 @app.get("/health")
@@ -158,6 +189,131 @@ def page_region(pid: str, frame: int,
         raise HTTPException(status_code=500, detail="failed to encode region")
     return Response(content=buf.tobytes(), media_type="image/jpeg",
                     headers={"Cache-Control": "public, max-age=86400"})
+
+
+# --------------------------------------------------------------------------
+# write side
+# --------------------------------------------------------------------------
+
+class ObservationIn(BaseModel):
+    """One officer as a human read them.
+
+    `commissioning_date` is the reading exactly as it appears on the page
+    (明四三、一二、二六 or 明治43年12月26日) - not a pre-parsed date. Normalizing
+    is the server's job so that an ambiguous reading is refused in one place
+    instead of being guessed differently by each caller.
+    """
+
+    row_index: int = Field(ge=0)
+    name_raw: str | None = None
+    rank_code: str | None = None
+    branch_code: str | None = None
+    post: str | None = None
+    seniority_no: int | None = None
+    commissioning_date: str | None = None
+    field_confidence: dict = Field(default_factory=dict)
+
+
+def _require_page(pid: str, frame: int) -> dict:
+    page = db.find_page(pid, frame)
+    if not page:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{pid} frame {frame} is not registered; run "
+                   f"`python ingestion/iiif_client.py register {pid}` first")
+    return page
+
+
+@app.post("/volumes/{pid}/pages/{frame}/cells", status_code=201)
+def create_cells(pid: str, frame: int, panel: int = Query(0, ge=0),
+                 user: dict = Depends(current_user)) -> dict:
+    """Persist this page's officer geometry as `roster_cell` rows.
+
+    Idempotent: re-running refreshes the rectangles rather than duplicating
+    officers, so a template improvement can be re-applied to a page already
+    being transcribed without disturbing the observations hanging off it.
+    """
+    import iiif_client
+    page = _require_page(pid, frame)
+    try:
+        path = iiif_client.fetch_page(pid, frame)
+        registered = ps.register_file(path, pid, frame, panel=panel,
+                                      url_for=iiif_client.region_url)
+    except ps.PageNotRegistrable as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SystemExit as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    payload = registered.as_dict()
+    cells = db.upsert_cells(str(page["page_id"]), payload["officers"],
+                            str(user["user_id"]))
+    return {"page_id": str(page["page_id"]), "template_id": payload["template_id"],
+            "cells": [{**c, "cell_id": str(c["cell_id"])} for c in cells]}
+
+
+@app.post("/volumes/{pid}/pages/{frame}/observations", status_code=201)
+def create_observation(pid: str, frame: int, body: ObservationIn,
+                       user: dict = Depends(current_user)) -> dict:
+    """Record one officer. Always a draft; confirmation is a separate act."""
+    page = _require_page(pid, frame)
+    if not page["edition_date"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"volume {pid} has no edition_date, which observations need as "
+                   f"as_of_date; run scripts/backfill_edition_dates.py")
+
+    with db.read_session() as cur:
+        cur.execute("SELECT cell_id FROM roster_cell WHERE page_id = %s AND row_index = %s",
+                    (page["page_id"], body.row_index))
+        cell = cur.fetchone()
+    if not cell:
+        raise HTTPException(
+            status_code=409,
+            detail=f"officer {body.row_index} has no roster_cell on this page; "
+                   f"POST .../cells first")
+
+    values = body.model_dump(exclude={"row_index", "commissioning_date"})
+    confidence = dict(values.pop("field_confidence") or {})
+
+    # The date normalizer refuses rather than guesses. A reading it cannot
+    # resolve is stored as no date at all, with the refusal recorded beside it,
+    # so a bad value never enters the panel wearing the same clothes as a good
+    # one. app/README: "ambiguous parses are flagged, not guessed".
+    parsed_date = None
+    if body.commissioning_date:
+        parsed = eradate.parse(body.commissioning_date)
+        if parsed.ok:
+            parsed_date = parsed.value
+        else:
+            confidence["commissioning_date"] = {
+                "raw": body.commissioning_date, "refused": parsed.reason}
+    values["commissioning_date"] = parsed_date
+    values["field_confidence"] = confidence
+
+    saved = db.create_observation(
+        page_id=str(page["page_id"]), cell_id=str(cell["cell_id"]),
+        as_of_date=page["edition_date"], user_id=str(user["user_id"]),
+        values=values)
+    return {
+        "obs_id": str(saved["obs_id"]),
+        "status": saved["status"],
+        "as_of_date": page["edition_date"].isoformat(),
+        "commissioning_date": parsed_date.isoformat() if parsed_date else None,
+        "flagged": {k: v for k, v in confidence.items() if isinstance(v, dict)},
+    }
+
+
+@app.get("/volumes/{pid}/pages/{frame}/observations")
+def list_observations(pid: str, frame: int) -> dict:
+    page = _require_page(pid, frame)
+    rows = db.observations_for_page(str(page["page_id"]))
+    for row in rows:
+        row["obs_id"] = str(row["obs_id"])
+        row["cell_id"] = str(row["cell_id"])
+        row["created_at"] = row["created_at"].isoformat()
+        if row["commissioning_date"]:
+            row["commissioning_date"] = row["commissioning_date"].isoformat()
+    return {"page_id": str(page["page_id"]), "observations": rows}
 
 
 def _service_id(iiif_client, pid: str, frame: int) -> str | None:
