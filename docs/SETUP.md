@@ -38,14 +38,12 @@ docker exec jpocr-db psql -U jpocr -d jpocr -c "\dt"
 
    Expect the full table list (person, observation, roster_cell, kanpo_event, …).
 
-## Backups (mandatory before any transcription work)
+## Backups
 
-- Windows: schedule `scripts/backup.ps1` daily — the `schtasks` one-liner is in the
-  script header. It dumps, self-verifies, and keeps 14 days.
-- Offsite mirroring removed by the lead's decision (31 Jul 2026): daily
-  file-sharing among project users distributes copies.
-- **Test one restore** before Phase 1 exits:
-  `docker exec -i jpocr-db psql -U jpocr -d jpocr_restore_test < backups\<dump>.sql`
+None. Removed entirely by the lead's decision (2 Aug 2026) — see the decisions
+record in `docs/PLAN.md`. There is one copy of the data, in the data home. The
+sources are online and the tools in this repo regenerate everything derived
+from them.
 
 ## Python tools (optional on the DB host)
 

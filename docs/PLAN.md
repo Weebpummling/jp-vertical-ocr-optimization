@@ -99,10 +99,9 @@ train/hold-out split fixed; all four spikes have written answers.
 - [x] Docker Compose running on the lead's machine: Postgres 16 core with schema
       init and guarded data volume; stack verified healthy with vocabularies
       loaded and three volumes registered.
-- [x] **Backups:** `scripts/backup.ps1` scheduled daily 02:00 (byte-exact dump via
-      docker cp, Japanese-sentinel corruption check, 14-day rotation; restore
-      round-trip verified). The 03:00 irreplaceables snapshot targets the
-      external SSD. Offsite mirroring removed by the lead (31 Jul 2026).
+- [x] **Backups: removed entirely** (lead, 2 Aug 2026 — decision 8). Both scheduled
+      tasks unregistered, both scripts deleted, all copies removed. One copy of the
+      data lives in the data home.
 - [x] Audit logging wired as Postgres triggers (not app-layer) so no write path can
       bypass it — full before/after images, append-only log, TRUNCATE refused;
       guarantees asserted by `db/audit_check.sql` in CI on every push.
@@ -300,12 +299,13 @@ Settled with the project lead, 29 July 2026; later decisions carry their own dat
 | # | Decision | Answer | Consequences |
 |---|---|---|---|
 | 1 | **VLM choice** | Deferred pending analysis — see `docs/vlm-selection.md`; final call after a bake-off on Spike C pages | Lead's machine has **no discrete GPU** (integrated graphics, 16 GB RAM), so fine-tuning happens on a rented GPU; local inference means a small quantized model on CPU, or hosted inference |
-| 2 | **Hosting** | Lead's personal machine; a small hosted VM is acceptable later if workflow needs it | Docker Compose targets the local machine. **Superseded 31 Jul 2026 (lead):** the offsite-backup requirement is removed — sync friction outweighed it, and daily file-sharing among users distributes copies. Backups are local dumps + the external-SSD snapshot |
+| 2 | **Hosting** | Lead's personal machine; a small hosted VM is acceptable later if workflow needs it | Docker Compose targets the local machine. **Superseded twice:** the offsite-backup requirement was removed 31 Jul 2026, and backups entirely on 2 Aug 2026 (decision 8) |
 | 3 | **Team** | Two people (lead + one contributor) while the structure is built; verifiers join for the labor phase once it's ready | The workstation must be built for later multi-user onboarding (per-user attribution) even though it starts with two accounts. Undergrad-facing UX simplicity becomes a Phase-1 design criterion, not a nice-to-have. **Amended 2 Aug 2026 by decision 7:** reviewer ≠ author is *not* enforced by the system |
 | 7 | **Worker identity** (2 Aug 2026) | Each worker enters an issued **id code**, which is their unique identifier. No passwords, no SSO, **no roles** | Attribution, not access control — the requirement is that work is recorded to whoever did it. The code lives in `app_user.login`, so the frozen schema is untouched. The workstation may leave this machine (depends on the human-hours estimate for the remaining work), which is why codes are minted with ~57 bits of entropy and why TLS/a tunnel is a condition of that move. See `docs/decision-workstation-auth.md` |
 | 4 | **Private data home** | Lead's personal machine, outside this repo's working tree | Fixed local path convention, documented in `docs/`; included in the local backup snapshot; never referenced by absolute path from committed code |
 | 5 | **Academy dataset** | Lead provides it personally | Spike D reduces to a handoff: get the file, confirm the blocking keys (name + commissioning date/cohort + branch) |
 | 6 | **NDL/JACAR bulk access** | Research use; special permission unlikely to be needed | Spike B still records observed rate behavior and terms so retrieval stays polite and defensible |
+| 8 | **Backups** (2 Aug 2026) | **Removed entirely.** No scheduled tasks, no scripts, no second copies anywhere | Every operational failure this project has hit came from the backup machinery, which was protecting ~112 MB of static files and a database holding two rows. The sources are online and the tools here regenerate what is derived from them; the workbook and scans have originals outside this machine. One copy of the data, in the data home. This supersedes the "database loss" mitigation in the risk table below |
 
 Hold-out enforcement (from the ground-truth split spec) is owned by the lead.
 
@@ -335,7 +335,7 @@ still mined so attrition across the gap is explained, never silent.
 | Silent incompleteness — officers missing from the panel without anyone noticing | Coverage-vs-worklist metric; seniority-anchor auditing; explained exits via Kanpō |
 | Drift back to bottom-up detection / crop-tuning | Architectural commitment above; no per-page self-improving detector |
 | VLM/OCR hallucination on vertical names — silent and plausible | Proposal-only role; dual-engine agreement; ground-truth fine-tuning and measurement |
-| **Database loss destroys human labor** — transcription hours are the costliest asset and all live in one Postgres | Nightly `pg_dump` + external-SSD snapshot; restore tested. Accepted residual risk (lead, 31 Jul 2026): no offsite copy — a site-loss event relies on daily shared copies among users |
+| **Database loss destroys human labor** — transcription hours are the costliest asset and all live in one database | **Accepted, unmitigated** (lead, 2 Aug 2026 — decision 8). Backups are gone. The counterweight is that finished work leaves the machine as shared exports rather than sitting only in a local database |
 | Template registration fails on degraded real pages (the design's load-bearing bet) | Spike C proves it on real scans, including damaged pages, before build-weeks are committed |
 | Kanpō full text patchy for parts of 1922–1937 | Spike A measures coverage first; weak years get scoped OCR, planned rather than discovered |
 | NDL/JACAR rate limits or terms constrain bulk retrieval | Spike B surfaces limits; local cache/mirror + politeness layer if needed |
@@ -351,8 +351,8 @@ still mined so attrition across the gap is explained, never silent.
    reconnaissance and the VLM analysis under way; D is a handoff from the lead.)*
 2. Register the ground truth and fix the train/hold-out split per the definition of done —
    this unlocks both measurement and VLM tuning and is the one irreversible Phase-0 call.
-3. Define the private-data path convention on the lead's machine and set up the
-   off-machine backup — the two operational consequences of the decisions record.
+3. Define the private-data path convention on the lead's machine — one copy, one
+   folder, no backups (decision 8).
 4. Verify and freeze schema + vocabularies against real 1922+ pages.
 5. Begin the division-level deployment reference table (theater by unit-year), starting
    from the documented Kwantung Army rotation — a research task that can run now.
