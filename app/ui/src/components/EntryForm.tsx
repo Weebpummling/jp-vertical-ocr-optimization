@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Cell, Vocab, VocabEntry } from "../api";
 import { resolveVocab, suggestVocab } from "../api";
+import type { SaveState, Values } from "../observation";
 
 export interface FieldSpec {
   key: string;
@@ -49,7 +50,7 @@ export const FIELDS: FieldSpec[] = [
   { key: "notes", label: "備考", cell: null },
 ];
 
-export type Values = Record<string, string>;
+export type { Values };
 
 interface Props {
   officerIndex: number;
@@ -61,6 +62,9 @@ interface Props {
   activeField: string;
   onFocusField: (key: string) => void;
   onOfficer: (delta: number) => void;
+  /** Record this officer as a draft. Safe to call twice: unchanged is a no-op. */
+  onCommit: () => void;
+  saveState?: SaveState;
 }
 
 export function EntryForm({
@@ -73,6 +77,8 @@ export function EntryForm({
   activeField,
   onFocusField,
   onOfficer,
+  onCommit,
+  saveState,
 }: Props) {
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const composing = useRef(false);
@@ -90,7 +96,11 @@ export function EntryForm({
     const next = i + delta;
     if (next < 0) return;
     if (next >= FIELDS.length) {
-      onOfficer(1); // rolled off the end: next officer, back to the top field
+      // Rolled off the end: this officer is finished, so record them before
+      // moving on. Keyboard-first means the common path never needs the mouse -
+      // and never needs the reader to remember to save.
+      onCommit();
+      onOfficer(1);
       onFocusField(FIELDS[0].key);
       return;
     }
@@ -101,13 +111,22 @@ export function EntryForm({
     // The IME owns these keys while it is converting. Never pre-empt it.
     if (composing.current || e.nativeEvent.isComposing) return;
 
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();      // record without leaving the field
+      onCommit();
+      return;
+    }
+    // Leaving an officer records them: an unsaved officer left behind by a
+    // keystroke is transcription work quietly thrown away.
     if (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowRight")) {
       e.preventDefault();
+      onCommit();
       onOfficer(1);
       return;
     }
     if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowLeft")) {
       e.preventDefault();
+      onCommit();
       onOfficer(-1);
       return;
     }
@@ -240,10 +259,42 @@ export function EntryForm({
       </div>
 
       <footer className="pane__foot">
-        <p className="muted">
-          Nothing is saved yet — the write side lands with authentication, since
-          no code path may author a value without a human behind it.
-        </p>
+        <div className="save">
+          <button
+            type="button"
+            className="save__btn"
+            onClick={onCommit}
+            disabled={saveState?.state === "saving"}
+          >
+            {saveState?.state === "saving" ? "recording…" : "record officer"}
+          </button>
+          <span className="keys">
+            <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, or <kbd>Enter</kbd> off the last field
+          </span>
+        </div>
+
+        {saveState?.state === "saved" && (
+          <p className="save__ok">
+            recorded as a draft
+            {saveState.author && ` by ${saveState.author}`} — confirmation is a
+            separate act
+          </p>
+        )}
+        {saveState?.state === "error" && (
+          <p className="save__err">not recorded: {saveState.message}</p>
+        )}
+        {saveState?.flagged && Object.keys(saveState.flagged).length > 0 && (
+          <div className="save__flags">
+            <p>Saved without these — the server would not read them for you:</p>
+            <ul>
+              {Object.entries(saveState.flagged).map(([field, why]) => (
+                <li key={field}>
+                  <code>{field}</code> {why.raw && <b>{why.raw}</b>} — {why.refused}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </footer>
     </section>
   );

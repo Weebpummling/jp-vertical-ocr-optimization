@@ -1,22 +1,38 @@
 /**
  * Layer 3 - the three-pane transcription workstation.
  *
- * Read-only so far: it places officers and cells from the API and lets a
- * reader move through them by keyboard. Values are held in memory; persistence
- * lands with the write side and authentication.
+ * A worker identifies themselves with their id code, reads officers off the
+ * page, and each committed officer becomes a draft `observation` recorded to
+ * them. Nothing is confirmed here: confirmation is a separate, deliberate act,
+ * and the machine's job is to place the cell, not to decide what it says.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  createCells,
+  fetchObservations,
   fetchPage,
-  fetchVocab,
+  forgetIdCode,
+  NotIdentified,
   pageImageUrl,
   PageNotRegistrable,
   regionUrl,
+  saveObservation,
+  storedIdCode,
+  whoami,
   type RegisteredPage,
   type Vocab,
+  type Worker,
 } from "./api";
+import { fetchVocab } from "./api";
+import {
+  buildObservation,
+  isBlank,
+  type SaveState,
+  type Values,
+} from "./observation";
+import { IdentityGate } from "./components/IdentityGate";
 import { Viewer } from "./components/Viewer";
-import { EntryForm, FIELDS, type Values } from "./components/EntryForm";
+import { EntryForm, FIELDS } from "./components/EntryForm";
 import { Candidates } from "./components/Candidates";
 import "./styles.css";
 
@@ -24,32 +40,88 @@ const DEFAULT_PID = "1449426"; // 昭和8年9月1日調
 const DEFAULT_FRAME = 100;
 
 export default function App() {
+  const [worker, setWorker] = useState<Worker | null>(null);
+  const [identityChecked, setIdentityChecked] = useState(false);
+  const [gateNotice, setGateNotice] = useState<string | null>(null);
+
   const [pid, setPid] = useState(DEFAULT_PID);
   const [frame, setFrame] = useState(DEFAULT_FRAME);
   const [page, setPage] = useState<RegisteredPage | null>(null);
   const [vocab, setVocab] = useState<Vocab | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dbWarning, setDbWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const [officerIndex, setOfficerIndex] = useState(0);
   const [activeField, setActiveField] = useState(FIELDS[0].key);
   const [entries, setEntries] = useState<Record<number, Values>>({});
+  const [saves, setSaves] = useState<Record<number, SaveState>>({});
+
+  // What was on screen when each officer was last saved. Tabbing back through a
+  // finished officer must not post a second draft; editing one deliberately
+  // should.
+  const savedSnapshot = useRef<Record<number, string>>({});
+  // `roster_cell` rows are a per-page precondition for saving, and the endpoint
+  // is idempotent, so it runs once per page rather than once per officer.
+  const cellsEnsured = useRef<Set<string>>(new Set());
+
+  // A stored code is checked before the workstation opens: a code that has been
+  // rotated should fail here, not after an hour of transcription.
+  useEffect(() => {
+    if (!storedIdCode()) {
+      setIdentityChecked(true);
+      return;
+    }
+    whoami()
+      .then(setWorker)
+      .catch((e) => {
+        forgetIdCode();
+        if (e instanceof NotIdentified) {
+          setGateNotice("The code stored in this browser is no longer recognized.");
+        } else {
+          setGateNotice(`Could not reach the workstation API: ${e}`);
+        }
+      })
+      .finally(() => setIdentityChecked(true));
+  }, []);
 
   useEffect(() => {
+    if (!worker) return;
     fetchVocab()
       .then(setVocab)
       .catch((e) => setError(String(e)));
-  }, []);
+  }, [worker]);
 
   const load = useCallback(async (p: string, f: number) => {
     setLoading(true);
     setError(null);
+    setDbWarning(null);
     try {
       const data = await fetchPage(p, f);
       setPage(data);
       setOfficerIndex(0);
       setActiveField(FIELDS[0].key);
       setEntries({});
+      setSaves({});
+      savedSnapshot.current = {};
+
+      // What has already been read on this page, so a second worker does not
+      // re-transcribe rows that are done. A 404 here means the volume is not
+      // registered in the database - worth saying now rather than at the first
+      // save.
+      try {
+        const { observations } = await fetchObservations(p, f);
+        const existing: Record<number, SaveState> = {};
+        for (const obs of observations) {
+          existing[obs.row_index] = { state: "saved", author: obs.author };
+        }
+        setSaves(existing);
+      } catch {
+        setDbWarning(
+          `${p} frame ${f} is not registered in the database, so nothing can be ` +
+            `saved yet. Run: python ingestion/iiif_client.py register ${p}`,
+        );
+      }
     } catch (e) {
       setPage(null);
       setError(
@@ -63,8 +135,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    load(DEFAULT_PID, DEFAULT_FRAME);
-  }, [load]);
+    if (worker) load(DEFAULT_PID, DEFAULT_FRAME);
+  }, [worker, load]);
 
   const officer = page?.officers[officerIndex];
   const activeCell = useMemo(
@@ -85,10 +157,62 @@ export default function App() {
       [officerIndex]: { ...(prev[officerIndex] ?? {}), [key]: value },
     }));
 
+  const signOut = useCallback((notice?: string) => {
+    forgetIdCode();
+    setWorker(null);
+    setPage(null);
+    setGateNotice(notice ?? null);
+  }, []);
+
+  const commit = useCallback(
+    async (index: number) => {
+      if (!page) return;
+      const values = entries[index];
+      if (!values || isBlank(values)) return; // nothing typed: nothing to record
+      const snapshot = JSON.stringify(values);
+      if (savedSnapshot.current[index] === snapshot) return; // already recorded, unchanged
+
+      setSaves((s) => ({ ...s, [index]: { state: "saving" } }));
+      const pageKey = `${page.pid}:${page.frame}:${page.panel}`;
+      try {
+        if (!cellsEnsured.current.has(pageKey)) {
+          await createCells(page.pid, page.frame, page.panel);
+          cellsEnsured.current.add(pageKey);
+        }
+        const saved = await saveObservation(
+          page.pid,
+          page.frame,
+          buildObservation(index, values, vocab),
+        );
+        savedSnapshot.current[index] = snapshot;
+        setSaves((s) => ({
+          ...s,
+          [index]: { state: "saved", flagged: saved.flagged },
+        }));
+      } catch (e) {
+        if (e instanceof NotIdentified) {
+          signOut("Your id code stopped being recognized. Enter it again.");
+          return;
+        }
+        setSaves((s) => ({
+          ...s,
+          [index]: { state: "error", message: (e as Error).message ?? String(e) },
+        }));
+      }
+    },
+    [page, entries, vocab, signOut],
+  );
+
   // The viewer follows the cursor: the current cell if the field has one,
   // otherwise the whole officer strip (branch and rank live in the section
   // header, not in any cell).
   const focus = activeCell?.bbox ?? officer?.bbox ?? null;
+
+  if (!identityChecked) return <div className="gate" />;
+  if (!worker)
+    return <IdentityGate onIdentified={setWorker} notice={gateNotice} />;
+
+  const savedCount = Object.values(saves).filter((s) => s.state === "saved").length;
 
   return (
     <div className="app">
@@ -121,15 +245,23 @@ export default function App() {
         {page && (
           <p className="status">
             <code>{page.template_id}</code> · {page.officer_count} officers ·{" "}
-            {page.bands_matched}/{page.bands_total} bands · skew {page.skew_deg}°
+            {savedCount} recorded · {page.bands_matched}/{page.bands_total} bands ·
+            skew {page.skew_deg}°
             {page.needs_review && (
               <span className="tag tag--suspect">needs review</span>
             )}
           </p>
         )}
+        <p className="whoami">
+          recording as <strong>{worker.display_name}</strong>
+          <button type="button" className="linkish" onClick={() => signOut()}>
+            not you?
+          </button>
+        </p>
       </header>
 
       {error && <div className="error">{error}</div>}
+      {dbWarning && <div className="warning">{dbWarning}</div>}
 
       {page && officer && (
         <main className="panes">
@@ -144,6 +276,8 @@ export default function App() {
             activeField={activeField}
             onFocusField={setActiveField}
             onOfficer={moveOfficer}
+            onCommit={() => commit(officerIndex)}
+            saveState={saves[officerIndex]}
           />
           <Candidates
             field={activeField}

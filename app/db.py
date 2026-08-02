@@ -81,11 +81,17 @@ def actor_session(user_id: str) -> Iterator[psycopg.Cursor]:
 # lookups
 # --------------------------------------------------------------------------
 
-def find_user(login: str) -> dict | None:
+def find_user(access_code: str) -> dict | None:
+    """Resolve an id code to the worker it belongs to.
+
+    The code *is* the identifier (docs/decision-workstation-auth.md), so it lives
+    in `app_user.login` and no schema change was needed. Callers should treat the
+    returned `login` as a secret and show `display_name` instead.
+    """
     with read_session() as cur:
         cur.execute(
-            "SELECT user_id, login, display_name, role FROM app_user WHERE login = %s",
-            (login,))
+            "SELECT user_id, login, display_name FROM app_user WHERE login = %s",
+            (access_code,))
         return cur.fetchone()
 
 
@@ -192,21 +198,33 @@ def create_observation(*, page_id: str, cell_id: str, as_of_date, user_id: str,
         return dict(cur.fetchone())
 
 
-def observations_for_page(page_id: str) -> list[dict]:
-    with read_session() as cur:
-        cur.execute(
-            """
+def observations_for_page(page_id: str, cur: psycopg.Cursor | None = None) -> list[dict]:
+    """What has been recorded for a page.
+
+    `cur` lets a caller run this inside an existing transaction - which is how
+    the tests exercise the real query against rows they roll back afterwards,
+    rather than asserting against a copy of the SQL.
+    """
+    sql = """
             SELECT o.obs_id, o.cell_id, c.row_index, o.name_raw, o.rank_code,
                    o.branch_code, o.post, o.seniority_no, o.commissioning_date,
-                   o.status, o.created_at, u.login AS author
+                   o.status, o.created_at,
+                   -- The display name, never `u.login`: that column holds the
+                   -- worker's id code, and this listing is visible to every
+                   -- other worker on the page.
+                   COALESCE(u.display_name, '(unnamed)') AS author
               FROM observation o
               JOIN roster_cell c USING (cell_id)
          LEFT JOIN app_user u ON u.user_id = o.author_user_id
              WHERE o.page_id = %s
           ORDER BY c.row_index
-            """,
-            (page_id,))
+    """
+    if cur is not None:
+        cur.execute(sql, (page_id,))
         return [dict(r) for r in cur.fetchall()]
+    with read_session() as own:
+        own.execute(sql, (page_id,))
+        return [dict(r) for r in own.fetchall()]
 
 
 def set_volume_edition_date(volume_id: str, edition_date, user_id: str) -> None:

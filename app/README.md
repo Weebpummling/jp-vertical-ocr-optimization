@@ -95,7 +95,7 @@ Two behaviours worth keeping when this grows:
 
 | Endpoint | Does |
 |---|---|
-| `GET /whoami` | Resolve the caller's `X-Annotator` header to an `app_user` |
+| `GET /whoami` | Resolve the caller's id code to the worker it belongs to |
 | `POST /volumes/{pid}/pages/{frame}/cells` | Persist the page's officer geometry as `roster_cell` rows (idempotent per `row_index`) |
 | `POST /volumes/{pid}/pages/{frame}/observations` | Record one officer as a human read them |
 | `GET /volumes/{pid}/pages/{frame}/observations` | What has been recorded for a page |
@@ -115,11 +115,36 @@ Three rules are enforced rather than documented:
   recorded in `field_confidence`, so a bad value never enters the panel dressed
   as a good one.
 
-> ⚠ **Identification, not authentication.** `app_user` in the frozen schema has
-> no credential column, so the header proves nothing. Keep the API on
-> `127.0.0.1` and read `audit_log.actor` as "the login the client claimed" until
-> [docs/decision-workstation-auth.md](../docs/decision-workstation-auth.md) is
-> settled.
+## Who is writing
+
+A worker is issued an **id code**; typing it is how they identify themselves,
+and the code is their identifier on the project. No passwords, no accounts, and
+**no roles** — decided 2 Aug 2026,
+[docs/decision-workstation-auth.md](../docs/decision-workstation-auth.md).
+
+```bash
+python scripts/issue_access_code.py "Their Name"   # mints JP-K7QP-3M2X-9WTD
+python scripts/issue_access_code.py --list         # who exists (never prints codes)
+python scripts/issue_access_code.py --rotate <user_id>   # a code got shared
+```
+
+The code travels in `X-Annotator` and resolves against `app_user.login`, so the
+frozen schema needed no credential column. Two properties are load-bearing and
+have tests on them (`test_identity.py`):
+
+- **Codes are minted, never chosen.** ~57 bits from `secrets`, in an alphabet
+  with no `O`/`0` or `I`/`1`/`L`, because codes get read aloud and typed by
+  someone not looking at the screen. Entropy is what would make exposing this on
+  a network defensible; `verifier1` would not be.
+- **The code never comes back out.** Not in a 401 body, not from `whoami`, and
+  not in the observations listing — that one is visible to every other worker on
+  the page, so it attributes work to `display_name`, never to `login`.
+
+What this does not do is prove who is at the keyboard: anyone holding a code can
+write as its owner. That is the accepted trade — the requirement is that work is
+recorded to the person who did it, not that the software polices access. **If
+this ever leaves `127.0.0.1`, serve it over TLS or a tunnel**, since the code is
+a bearer secret.
 
 Setup, once:
 
@@ -127,23 +152,44 @@ Setup, once:
 docker compose up -d                                   # Postgres
 python ingestion/iiif_client.py register <pid> | psql   # register a volume
 python scripts/backfill_edition_dates.py --apply        # observations need as_of_date
+python scripts/issue_access_code.py "Your Name"         # your own code
 ```
 
-Creating the first user is a bootstrap (nothing exists to attribute it to, so
-the audit log records a NULL actor by design):
+The very first code is a bootstrap — there is nobody to attribute the insert to,
+so `audit_log` records a NULL actor by design. Pass `--issuer <your code>` for
+every one after that.
 
-```sql
-INSERT INTO app_user (login, display_name, role) VALUES ('you','Your Name','annotator');
-```
+## Recording an officer
+
+The UI writes. An officer is recorded by <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, by
+<kbd>Enter</kbd> off the last field, or by leaving them with
+<kbd>Alt</kbd>+<kbd>↓</kbd> — leaving an officer records them, because an
+unsaved officer abandoned by a keystroke is transcription work quietly thrown
+away. Three rules hold it together:
+
+- **A blank officer is not a record**, and re-recording an unchanged one is a
+  no-op, so stepping back through finished officers cannot post duplicate
+  drafts. Editing one deliberately does post a new draft — observations are
+  append-only readings, not a mutable form.
+- **What the server refused is shown, not swallowed.** A branch outside the
+  controlled vocabulary and a date `eradate` could not resolve both save with
+  the field left NULL and the raw reading kept in `field_confidence`; the form
+  lists them under the officer rather than reporting a clean success.
+- **Whoever already read this page is visible.** Loading a page fetches its
+  observations, so a second worker sees which officers are done and by whom
+  instead of re-transcribing them.
+
+備考 rides in `field_confidence.notes`: `observation` has no notes column and
+the schema is frozen, so a reader's remark goes where notes about a reading
+belong rather than being dropped.
 
 ## Not built yet
 
-The UI does not call the write endpoints — the form still holds values in
-memory. Wiring it up is small; it waits on the auth decision so annotators are
-not trained against a login that is about to change.
+From the non-negotiables above: the difficult-character toolkit (variant
+palette, radical/IDS lookup, attach-the-glyph), furigana and per-character
+uncertainty capture, and the seal/damage flag. The candidate pane is a styled
+placeholder until Layer 4 produces proposals.
 
-Also outstanding from the non-negotiables above: the difficult-character toolkit
-(variant palette, radical/IDS lookup, attach-the-glyph), furigana and
-per-character uncertainty capture, and the seal/damage flag. The candidate pane
-is a styled placeholder until Layer 4 produces proposals. Nothing enforces
-`app_user.role` yet, so reviewer ≠ author is advisory.
+Roles are **not** outstanding work — `app_user.role` gates nothing by decision,
+and reviewer ≠ author is arranged between people rather than enforced by the
+software.

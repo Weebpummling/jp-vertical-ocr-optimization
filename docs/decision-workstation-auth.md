@@ -1,65 +1,75 @@
-# Decision needed — how the workstation authenticates annotators
+# Decision — how the workstation identifies annotators
 
-**Status: open.** Raised 1 Aug 2026, when the write side landed.
-**Blocks:** the multi-user phase. Not the lead transcribing alone on their own
-machine today.
+**Status: decided by the lead, 2 Aug 2026.** Raised 1 Aug when the write side
+landed.
 
-## What is in place
+## The decision
 
-Writes are **attributed but not authenticated**. The API takes an `X-Annotator`
-header, looks the login up in `app_user`, refuses with 401 if it is missing or
-unknown, and sets `app.user_id` for the transaction so the audit triggers record
-who did it. Every `roster_cell` and `observation` written so far carries a real
-actor in `audit_log`.
+**Each worker is issued an id code. Entering it is how they identify themselves,
+and that code is their unique identifier on the project.** No passwords, no SSO,
+no session accounts, and **no roles** — `app_user.role` gates nothing and will
+not be enforced.
 
-What it does *not* do is verify that the caller is who the header says. Anyone
-who can reach the port can claim any login.
+The requirement this satisfies is stated plainly: *make sure their work is
+recorded to them*. That is attribution, not access control. This is a two-person
+project plus a small number of verifiers, and login is not a problem the project
+is trying to solve.
 
-## Why it was left there
+The workstation may also leave this machine — whether it does depends on how
+many human hours the remaining work is estimated to need, which is not settled
+yet. The design therefore may not assume `localhost`.
 
-`app_user` in the frozen schema is `(user_id, login, display_name, role)`. There
-is **no credential column** — no password hash, no token, no external-identity
-reference. Authenticating properly means migrating an audited table, and the
-schema was frozen 31 Jul 2026 with the rule that changes from there are
-deliberate migrations. Picking a scheme unilaterally and adding columns to
-`app_user` is exactly the kind of decision that should not arrive as a side
-effect of building a form.
+## What that means concretely
 
-The current deployment also makes it survivable: one workstation, on the lead's
-machine, with Postgres bound to `127.0.0.1` and the API served locally. The
-header is honest identification between two people who trust each other.
+- The id code goes in `app_user.login`. It **is** the identifier, so no schema
+  change is needed: the column is already `UNIQUE NOT NULL`, and the API already
+  resolves the `X-Annotator` header against it. The schema stays frozen.
+- `display_name` carries the human name. `role` is set to `annotator` for
+  everyone because the column is `NOT NULL` with a `CHECK`; it means nothing and
+  no code reads it.
+- Codes are **minted, not chosen** — `scripts/issue_access_code.py` generates
+  ~59 bits from `secrets` in a no-ambiguous-characters alphabet
+  (`JP-K7QP-3M2X-9WTD`). A guessable code like `verifier1` would be the whole
+  security surface if the workstation is ever exposed; a random one makes online
+  guessing irrelevant without asking anyone to remember a password.
+- The code is a bearer secret, so it is kept out of responses and logs: `whoami`
+  returns the display name, the observations listing attributes work to the
+  display name rather than the code, and a bad code is refused without echoing
+  what was sent.
+- The browser stores the code in `localStorage` and sends it on every write. The
+  worker types it once per machine.
 
-It stops being survivable the moment the decisions record's point 3 happens —
-undergraduate annotators joining for the labour phase. At that point
-"reviewer ≠ author" is a claim the system cannot actually enforce, and the
-audit log records assertions rather than facts.
+## What this deliberately does not do
 
-## The options
+Anyone holding a worker's code can write as that worker. There is no
+confirmation of who is at the keyboard, and a shared or leaked code is
+indistinguishable from the real one. For attribution among people who are all on
+the same project, that is the intended trade — the failure mode is a
+mis-attributed row, not an outsider getting in, provided the codes stay random
+and the deployment is not open to the world.
 
-| # | Approach | Migration | Fits |
-|---|---|---|---|
-| 1 | Password on `app_user` (argon2/bcrypt hash column) + session cookie | Add `password_hash`, `password_set_at` | Self-contained; no external dependency; the project owns the whole surface |
-| 2 | Institutional SSO (university IdP, OIDC) | Add `external_subject` unique column | Undergraduates already have accounts; no password handling at all; depends on the institution |
-| 3 | Per-user API tokens | Add a `user_token` table | Good for scripts and the Kanpō miner; poor as the only human login |
-| 4 | Leave header identification, bind to localhost, never expose | None | Only tenable while the lead is the sole user |
+**If the workstation leaves this machine**, two things become load-bearing and
+are conditions of that move, not suggestions:
 
-Worth deciding together with two related questions:
+1. **Serve it over TLS** (or a tunnel — Tailscale, an SSH forward, a reverse
+   proxy with a certificate). A bearer code sent over plain HTTP on a shared
+   network is readable in transit by anyone on the path.
+2. **Do not put it on a public address without at least a network-level gate.**
+   The codes make guessing impractical, but nothing else stands between the
+   internet and the transcription database.
 
-- **Does the workstation ever leave `localhost`?** Decisions record point 2 says
-  hosting is the lead's machine, with a small hosted VM acceptable later. Option
-  4 dies the moment that VM exists.
-- **What does `role` gate?** The column already distinguishes
-  annotator/reviewer/adjudicator/admin, but nothing enforces it yet. Whichever
-  option is chosen should land with role checks on the write endpoints, or the
-  reviewer ≠ author rule stays advisory.
+If those ever become inconvenient, the upgrade — not needed now — is to store a
+hash of the code instead of the code itself (`access_code_hash`), keep `login`
+as a plain handle, and rotate by re-issuing. That is a small migration and can
+happen later without changing how a worker signs in: they still just type their
+code.
 
-## Recommendation
+## Consequences for the audit log
 
-**Option 1 now, option 2 when the undergraduates arrive.** A password column and
-a signed session cookie is a small, well-understood migration that makes the
-audit log mean what it says, and it does not block on anyone outside the
-project. SSO is the better end state for a cohort of students, but it needs the
-institution's cooperation and should not gate the labour phase starting.
+`audit_log.actor` now means "the holder of this id code", which is what the
+project needs it to mean. The earlier caveat — read it as "the login the client
+claimed" — is retired for the deployments described above.
 
-Until this is decided, keep the API on `127.0.0.1` and treat `audit_log.actor`
-as "the login the client claimed", not "the person who did it".
+`reviewer ≠ author` cannot be enforced by the system, because roles are not
+enforced. That was accepted with this decision: verification is arranged between
+people, not by the software.

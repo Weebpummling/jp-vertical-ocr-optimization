@@ -147,9 +147,17 @@ difficult-character toolkit; template registration for the main Shōwa layout.
 **Exit criterion:** an annotator captures a full 1922+ volume by hand — measured, with
 the observed officers/hour recorded as the baseline all later phases are judged against.
 
-- [ ] Three-pane workstation: zoomable page (cell auto-centered) · structured entry form
-      (氏名, 兵科, 階級, 職名, 任官年月日, seniority, notes) · candidate panel.
-- [ ] Keyboard-first, IME-aware entry — a whole officer without touching the mouse.
+- [x] Three-pane workstation: zoomable page (cell auto-centered) · structured entry form
+      (氏名, 兵科, 階級, 職名, 任官年月日, seniority, notes) · candidate panel. Reads *and*
+      writes: each committed officer becomes a draft `observation` attributed to the
+      worker's id code (`app/ui/`, `app/api.py`). Verified in a browser against pid
+      1449426 — refused values surface with their reason instead of saving clean.
+- [x] Keyboard-first, IME-aware entry — a whole officer without touching the mouse.
+      Leaving an officer records them, so work is never lost to a keystroke.
+- [x] Identity: each worker types an issued id code, which is their identifier
+      (`scripts/issue_access_code.py`). Decided 2 Aug 2026 —
+      `docs/decision-workstation-auth.md`. **Roles are not enforced and will not be**;
+      reviewer ≠ author is a human arrangement, not a system guarantee.
 - [x] Era-date normalizer (`reading/eradate.py`): 明治/大正/昭和 + kanji numerals in
       the roster's digit-juxtaposition notation → canonical dates; era bounds
       enforced; every ambiguous parse refused with a recorded reason.
@@ -287,13 +295,14 @@ Reuses Layers 1–4 and 9 wholesale; adds only two new capabilities.
 
 ## Decisions record
 
-Settled with the project lead, 29 July 2026.
+Settled with the project lead, 29 July 2026; later decisions carry their own date.
 
 | # | Decision | Answer | Consequences |
 |---|---|---|---|
 | 1 | **VLM choice** | Deferred pending analysis — see `docs/vlm-selection.md`; final call after a bake-off on Spike C pages | Lead's machine has **no discrete GPU** (integrated graphics, 16 GB RAM), so fine-tuning happens on a rented GPU; local inference means a small quantized model on CPU, or hosted inference |
 | 2 | **Hosting** | Lead's personal machine; a small hosted VM is acceptable later if workflow needs it | Docker Compose targets the local machine. **Superseded 31 Jul 2026 (lead):** the offsite-backup requirement is removed — sync friction outweighed it, and daily file-sharing among users distributes copies. Backups are local dumps + the external-SSD snapshot |
-| 3 | **Team** | Two people (lead + one contributor) while the structure is built; undergraduate annotators join for the labor phase once it's ready | Reviewer ≠ author is still enforceable between two people. The workstation must be built for later multi-user onboarding (auth, per-user audit) even though it starts with two accounts. Undergrad-facing UX simplicity becomes a Phase-1 design criterion, not a nice-to-have |
+| 3 | **Team** | Two people (lead + one contributor) while the structure is built; verifiers join for the labor phase once it's ready | The workstation must be built for later multi-user onboarding (per-user attribution) even though it starts with two accounts. Undergrad-facing UX simplicity becomes a Phase-1 design criterion, not a nice-to-have. **Amended 2 Aug 2026 by decision 7:** reviewer ≠ author is *not* enforced by the system |
+| 7 | **Worker identity** (2 Aug 2026) | Each worker enters an issued **id code**, which is their unique identifier. No passwords, no SSO, **no roles** | Attribution, not access control — the requirement is that work is recorded to whoever did it. The code lives in `app_user.login`, so the frozen schema is untouched. The workstation may leave this machine (depends on the human-hours estimate for the remaining work), which is why codes are minted with ~57 bits of entropy and why TLS/a tunnel is a condition of that move. See `docs/decision-workstation-auth.md` |
 | 4 | **Private data home** | Lead's personal machine, outside this repo's working tree | Fixed local path convention, documented in `docs/`; included in the local backup snapshot; never referenced by absolute path from committed code |
 | 5 | **Academy dataset** | Lead provides it personally | Spike D reduces to a handoff: get the file, confirm the blocking keys (name + commissioning date/cohort + branch) |
 | 6 | **NDL/JACAR bulk access** | Research use; special permission unlikely to be needed | Spike B still records observed rate behavior and terms so retrieval stays polite and defensible |

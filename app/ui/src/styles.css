@@ -187,3 +187,88 @@ kbd {
 .proposals { padding: 0.8rem 0.9rem; border-top: 1px dashed var(--line); }
 .proposals h3 { margin: 0 0 0.3rem; font-size: 0.85rem; }
 .proposals p { margin: 0; font-size: 0.8rem; }
+
+/* ---- identity gate ---- */
+.gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+.gate__card {
+  width: min(28rem, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.8rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.gate__card h1 { font: 600 1.15rem/1.2 var(--font-jp); margin: 0; }
+.gate__lede { margin: 0 0 0.4rem; color: var(--muted); }
+.gate__card label { color: var(--muted); font-size: 0.85rem; }
+.gate__input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: 1.05rem ui-monospace, "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.06em;
+}
+.gate__card button {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.gate__card button:disabled { opacity: 0.5; cursor: default; }
+.gate__error { margin: 0.2rem 0 0; color: var(--suspect); }
+.gate__notice { margin: 0; color: var(--provisional); }
+.gate__foot { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--muted); }
+
+/* The id code is a bearer secret: never rendered back, so the top bar shows
+   the display name the server resolved it to. */
+.whoami { margin: 0 0 0 auto; color: var(--muted); display: flex; gap: 0.5rem; }
+.linkish {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.warning {
+  margin: 0;
+  padding: 0.8rem 1rem;
+  background: #fbf6e8;
+  border-bottom: 1px solid var(--provisional);
+  color: #6b5a1e;
+}
+
+/* ---- recording ---- */
+.save { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.save__btn {
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.save__btn:disabled { opacity: 0.5; cursor: default; }
+.save__ok { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
+.save__err { margin: 0.5rem 0 0; color: var(--suspect); font-size: 0.85rem; }
+.save__flags {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px dashed var(--suspect);
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+.save__flags p { margin: 0 0 0.3rem; color: var(--suspect); }
+.save__flags ul { margin: 0; padding-left: 1.1rem; }
+.save__flags b { font: 0.9rem var(--font-jp); }

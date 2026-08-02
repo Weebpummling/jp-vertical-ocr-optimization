@@ -1,8 +1,10 @@
 /**
- * Read-side client for the workstation API (app/api.py).
+ * Client for the workstation API (app/api.py).
  *
- * Nothing here writes. Creating observations touches audited tables and needs
- * a human behind it, so those endpoints land with authentication.
+ * Writes carry the worker's id code in `X-Annotator`. The code is their
+ * identifier on the project (docs/decision-workstation-auth.md) — typed once,
+ * remembered by the browser, and never rendered back to the screen: what the UI
+ * shows is the display name the server resolves it to.
  */
 
 export type Bbox = [number, number, number, number]; // x, y, w, h in scan pixels
@@ -55,6 +57,8 @@ export interface Vocab {
 }
 
 export class PageNotRegistrable extends Error {}
+/** The id code was missing or is not recognized. */
+export class NotIdentified extends Error {}
 
 const BASE = "/api";
 
@@ -67,6 +71,56 @@ async function get<T>(path: string): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
+
+// --------------------------------------------------------------------------
+// identity
+// --------------------------------------------------------------------------
+
+const CODE_KEY = "jpocr.id-code";
+
+export const storedIdCode = () => localStorage.getItem(CODE_KEY) ?? "";
+export const rememberIdCode = (code: string) =>
+  localStorage.setItem(CODE_KEY, code.trim());
+export const forgetIdCode = () => localStorage.removeItem(CODE_KEY);
+
+export interface Worker {
+  user_id: string;
+  display_name: string;
+}
+
+/**
+ * Every identified request goes through here.
+ *
+ * A 401 is surfaced as its own error type rather than a generic failure: it is
+ * the one error the worker can actually fix, by entering the right code.
+ */
+async function send<T>(
+  path: string,
+  init: { method?: string; body?: unknown; code?: string } = {},
+): Promise<T> {
+  const code = init.code ?? storedIdCode();
+  if (!code) throw new NotIdentified("no id code entered");
+  const res = await fetch(`${BASE}${path}`, {
+    method: init.method ?? "GET",
+    headers: {
+      "X-Annotator": code,
+      ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  });
+  if (res.status === 401) {
+    const body = await res.json().catch(() => ({ detail: "unrecognized id code" }));
+    throw new NotIdentified(body.detail);
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? `${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+/** Resolve an id code to the worker it belongs to; the identity gate's check. */
+export const whoami = (code?: string) => send<Worker>("/whoami", { code });
 
 export const fetchVocab = () => get<Vocab>("/vocab");
 
@@ -88,6 +142,66 @@ export const regionUrl = (pid: string, frame: number, [x, y, w, h]: Bbox) =>
 export const fetchPage = (pid: string, frame: number, panel = 0) =>
   get<RegisteredPage>(
     `/volumes/${encodeURIComponent(pid)}/pages/${frame}?panel=${panel}&crop_urls=true`,
+  );
+
+// --------------------------------------------------------------------------
+// write side
+// --------------------------------------------------------------------------
+
+export interface ObservationIn {
+  row_index: number;
+  name_raw?: string | null;
+  rank_code?: string | null;
+  branch_code?: string | null;
+  post?: string | null;
+  seniority_no?: number | null;
+  /** As printed (明四三、一二、二六). The server normalizes, or refuses. */
+  commissioning_date?: string | null;
+  field_confidence?: Record<string, unknown>;
+  notes?: string | null;
+}
+
+export interface SavedObservation {
+  obs_id: string;
+  status: string;
+  as_of_date: string;
+  commissioning_date: string | null;
+  /** Fields the server would not accept as read — shown, never hidden. */
+  flagged: Record<string, { raw?: string; refused?: string }>;
+}
+
+export interface PageObservation {
+  obs_id: string;
+  row_index: number;
+  name_raw: string | null;
+  seniority_no: number | null;
+  status: string;
+  created_at: string;
+  /** Display name of whoever read it. */
+  author: string;
+}
+
+/**
+ * Materialize the page's officer geometry as `roster_cell` rows.
+ *
+ * Idempotent, and a precondition for saving: an observation hangs off a cell,
+ * so the first save on a page does this once.
+ */
+export const createCells = (pid: string, frame: number, panel = 0) =>
+  send<{ page_id: string; cells: unknown[] }>(
+    `/volumes/${encodeURIComponent(pid)}/pages/${frame}/cells?panel=${panel}`,
+    { method: "POST" },
+  );
+
+export const saveObservation = (pid: string, frame: number, body: ObservationIn) =>
+  send<SavedObservation>(
+    `/volumes/${encodeURIComponent(pid)}/pages/${frame}/observations`,
+    { method: "POST", body },
+  );
+
+export const fetchObservations = (pid: string, frame: number) =>
+  get<{ page_id: string; observations: PageObservation[] }>(
+    `/volumes/${encodeURIComponent(pid)}/pages/${frame}/observations`,
   );
 
 /**

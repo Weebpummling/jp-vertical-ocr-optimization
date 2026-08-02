@@ -7,10 +7,10 @@ Run it:
     pip install -r requirements.txt
     uvicorn app.api:app --reload      # from the repository root
 
-The read side is what exists so far - given a volume and frame, where every
-officer and every field sits on the page. Write endpoints (creating
-observations) are not here yet: they touch the audited tables, and no code path
-may author a value without a human behind it, so they land with authentication.
+The read side answers where every officer and every field sits on the page; the
+write side records what a human read there. Every write is attributed to the id
+code the caller presented (docs/decision-workstation-auth.md) - no code path may
+author a value without a person behind it.
 """
 
 from __future__ import annotations
@@ -41,27 +41,41 @@ app = FastAPI(
 # identity
 # --------------------------------------------------------------------------
 #
-# ⚠ This identifies the annotator; it does not authenticate them. `app_user` in
-# the frozen schema has no credential column, so there is nothing to verify a
-# password against, and inventing one here would mean a unilateral migration of
-# an audited table. A header is honest for the current deployment - one
-# workstation on the lead's machine, bound to 127.0.0.1 - and is deliberately
-# not sufficient for the multi-user phase. See docs/decision-workstation-auth.md.
+# Each worker is issued an id code; entering it is how they identify themselves,
+# and the code *is* their identifier on the project (decided 2 Aug 2026 -
+# docs/decision-workstation-auth.md). It arrives in `X-Annotator` and resolves
+# against `app_user.login`, so the frozen schema needs no credential column.
+#
+# Two consequences the code below is responsible for:
+#
+#   * the code is a bearer secret - it must not come back in a response or an
+#     error string, because those end up in logs and on other people's screens;
+#   * codes are minted by scripts/issue_access_code.py, never chosen. ~59 bits
+#     of `secrets` entropy is what makes guessing a non-issue if the workstation
+#     ever leaves this machine.
+#
+# Roles are deliberately not enforced: the requirement is that work is recorded
+# to the person who did it, not that the software police who may do what.
 
 def current_user(x_annotator: str | None = Header(default=None)) -> dict:
-    """Resolve the X-Annotator header to an app_user row, or refuse."""
+    """Resolve the caller's id code to an app_user row, or refuse.
+
+    The refusal never repeats the submitted code back: a 401 body is exactly the
+    place a secret gets copied into a log file or a screenshot.
+    """
     if not x_annotator:
-        raise HTTPException(status_code=401, detail="X-Annotator header required")
-    user = db.find_user(x_annotator)
+        raise HTTPException(status_code=401, detail="id code required (X-Annotator header)")
+    user = db.find_user(x_annotator.strip())
     if not user:
-        raise HTTPException(status_code=401, detail=f"unknown annotator {x_annotator!r}")
+        raise HTTPException(status_code=401, detail="unrecognized id code")
     return user
 
 
 @app.get("/whoami")
 def whoami(user: dict = Depends(current_user)) -> dict:
-    return {"login": user["login"], "display_name": user["display_name"],
-            "role": user["role"]}
+    """Who this code belongs to. Deliberately does not echo the code itself."""
+    return {"user_id": str(user["user_id"]),
+            "display_name": user["display_name"] or "(unnamed)"}
 
 
 @app.get("/health")
@@ -212,6 +226,10 @@ class ObservationIn(BaseModel):
     seniority_no: int | None = None
     commissioning_date: str | None = None
     field_confidence: dict = Field(default_factory=dict)
+    # 備考. `observation` has no notes column and the schema is frozen, so a
+    # reader's remark rides in `field_confidence` rather than being dropped on
+    # the floor - it is a note about the reading, which is what that column is.
+    notes: str | None = None
 
 
 def _require_page(pid: str, frame: int) -> dict:
@@ -272,8 +290,10 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
             detail=f"officer {body.row_index} has no roster_cell on this page; "
                    f"POST .../cells first")
 
-    values = body.model_dump(exclude={"row_index", "commissioning_date"})
+    values = body.model_dump(exclude={"row_index", "commissioning_date", "notes"})
     confidence = dict(values.pop("field_confidence") or {})
+    if body.notes and body.notes.strip():
+        confidence["notes"] = body.notes.strip()
 
     # The date normalizer refuses rather than guesses. A reading it cannot
     # resolve is stored as no date at all, with the refusal recorded beside it,
