@@ -319,7 +319,14 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
         "status": saved["status"],
         "as_of_date": page["edition_date"],
         "commissioning_date": parsed_date.isoformat() if parsed_date else None,
-        "flagged": {k: v for k, v in confidence.items() if isinstance(v, dict)},
+        # Only refusals. A field carrying 〓 for a character nobody could read was
+        # still saved, with what the reader *could* see - reporting it as
+        # "not recorded" would be a lie, and would teach annotators to distrust
+        # the flag that matters.
+        "flagged": {k: v for k, v in confidence.items()
+                    if isinstance(v, dict) and "refused" in v},
+        "needs_recheck": {k: v for k, v in confidence.items()
+                          if isinstance(v, dict) and v.get("unreadable")},
     }
 
 

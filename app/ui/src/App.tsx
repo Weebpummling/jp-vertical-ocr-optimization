@@ -179,10 +179,22 @@ export default function App() {
           await createCells(page.pid, page.frame, page.panel);
           cellsEnsured.current.add(pageKey);
         }
+        // Where each field was read from, so a character marked unreadable can
+        // be re-checked against the image instead of re-transcribed. Fields with
+        // no cell of their own (branch, rank) fall back to the officer strip.
+        const officerCells = page.officers[index]?.cells ?? [];
+        const cropUrls: Record<string, string | null> = {};
+        for (const spec of FIELDS) {
+          const cell = spec.cell
+            ? officerCells.find((c) => c.field === spec.cell)
+            : undefined;
+          cropUrls[spec.key] = cell?.crop_url ?? page.officers[index]?.crop_url ?? null;
+        }
+
         const saved = await saveObservation(
           page.pid,
           page.frame,
-          buildObservation(index, values, vocab),
+          buildObservation(index, values, vocab, cropUrls),
         );
         savedSnapshot.current[index] = snapshot;
         setSaves((s) => ({

@@ -184,12 +184,35 @@ away. Three rules hold it together:
 the schema is frozen, so a reader's remark goes where notes about a reading
 belong rather than being dropped.
 
+## When a character cannot be typed, or cannot be read
+
+Two different problems, both of which used to stop a reader dead.
+
+**The character is on the page but the IME will not produce it.** Rosters are
+printed in kyūjitai — 齋, 澤, 邊, 步, 戰 — and a modern IME offers the shinjitai.
+The toolkit shows the counterpart of every character actually typed, in both
+directions, and swaps it in one click. Only the pairs present in the field are
+offered: all 28 at once would be a wall to read past on every officer.
+
+**The character cannot be read at all** — damaged, sealed, or illegible. Then it
+becomes **〓** (<kbd>Alt</kbd>+<kbd>G</kbd>), the geta mark, inserted at the
+caret rather than appended so it marks *which* character was lost. The record
+saves with everything the reader could see, and `field_confidence` carries the
+count of unread characters and the IIIF crop they sit in.
+
+That last part is why a marked field comes back as `needs_recheck` and not as
+`flagged`. It was recorded; someone can re-read it from the image later. Calling
+it a refusal would be false, and would teach annotators to ignore the flag that
+does mean "this did not save".
+
+Radical/IDS lookup is deliberately absent. It needs an external
+character-decomposition dataset, and no reading has yet failed that the palette
+and the geta mark cannot get past — it can be added the first time one does.
+
 ## Not built yet
 
-From the non-negotiables above: the difficult-character toolkit (variant
-palette, radical/IDS lookup, attach-the-glyph), furigana and per-character
-uncertainty capture, and the seal/damage flag. The candidate pane is a styled
-placeholder until Layer 4 produces proposals.
+The seal/damage flag → alt-scan flip, and furigana capture. The candidate pane
+is a styled placeholder until Layer 4 produces proposals.
 
 Roles are **not** outstanding work — `app_user.role` gates nothing by decision,
 and reviewer ≠ author is arranged between people rather than enforced by the

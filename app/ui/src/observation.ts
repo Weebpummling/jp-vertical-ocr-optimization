@@ -21,9 +21,63 @@ import {
 
 export type Values = Record<string, string>;
 
+/**
+ * The geta mark, 〓 — centuries of Japanese typesetting practice for "a
+ * character belongs here and could not be set". Using it rather than a guess or
+ * a blank is the point: the reader records what they could see, marks what they
+ * could not, and the record says so out loud.
+ */
+export const GETA = "〓";
+
 export interface Refusal {
   raw: string;
   refused: string;
+}
+
+/** A field the reader could not fully read: saved, but flagged for a second look. */
+export interface Unreadable {
+  raw: string;
+  unreadable: number;
+  crop_url?: string | null;
+}
+
+export interface Swap {
+  from: string;
+  to: string;
+  note?: string;
+}
+
+/**
+ * Kyūjitai↔shinjitai swaps for the characters actually typed, both directions.
+ *
+ * Rosters are printed in kyūjitai — 齋, 澤, 邊, 步, 戰 — and a modern IME offers
+ * the shinjitai, so the reader types what they can and swaps to what is printed.
+ * Both directions, because which form is hard to type depends on the machine.
+ *
+ * Offering all 28 pairs at all times would be a wall of chips to read past on
+ * every field; offering the ones present in what was just typed is a short list
+ * that can be acted on.
+ */
+export function swapsFor(value: string, vocab: Vocab | null): Swap[] {
+  const table = vocab?.kanji_variants ?? [];
+  const seen = new Set<string>();
+  const out: Swap[] = [];
+  for (const char of value) {
+    for (const entry of table) {
+      const pair =
+        char === entry.canonical
+          ? { from: char, to: entry.variant, note: entry.note }
+          : char === entry.variant
+            ? { from: char, to: entry.canonical, note: entry.note }
+            : null;
+      if (!pair) continue;
+      const key = `${pair.from}->${pair.to}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(pair);
+    }
+  }
+  return out;
 }
 
 /** Where one officer's record stands with the server. */
@@ -47,18 +101,40 @@ export function buildObservation(
   rowIndex: number,
   values: Values,
   vocab: Vocab | null,
+  /** field key → IIIF URL of the crop it was read from, for re-checking. */
+  cropUrls: Record<string, string | null> = {},
 ): ObservationIn {
-  const confidence: Record<string, Refusal> = {};
+  const confidence: Record<string, Refusal | Unreadable> = {};
+
+  // A value containing 〓 is saved as read. What travels with it is where to
+  // look: the count of unread characters and the crop they are in.
+  for (const [key, value] of Object.entries(values ?? {})) {
+    const marks = (value ?? "").split(GETA).length - 1;
+    if (marks > 0) {
+      confidence[key] = {
+        raw: value.trim(),
+        unreadable: marks,
+        crop_url: cropUrls[key] ?? null,
+      };
+    }
+  }
+
+  // A value already marked unreadable keeps that reason. "not in the controlled
+  // vocabulary" is true of 步〓 but tells a reviewer nothing they can act on,
+  // whereas "one character could not be read, here is the crop" does.
+  const alreadyExplained = (key: string) => key in confidence;
 
   const vocabCode = (key: string, entries: VocabEntry[] | undefined) => {
     const typed = trimmed(values, key);
     if (!typed) return null;
     const resolved = resolveVocab(entries ?? [], typed);
     if (resolved) return resolved.code;
-    confidence[key] = {
-      raw: typed,
-      refused: "not in the controlled vocabulary",
-    };
+    if (!alreadyExplained(key)) {
+      confidence[key] = {
+        raw: typed,
+        refused: "not in the controlled vocabulary",
+      };
+    }
     return null;
   };
 
@@ -72,7 +148,7 @@ export function buildObservation(
     );
     if (/^\d+$/.test(normalized)) {
       seniority = Number(normalized);
-    } else {
+    } else if (!alreadyExplained("seniority_no")) {
       confidence.seniority_no = {
         raw: seniorityTyped,
         refused: "not a plain number",

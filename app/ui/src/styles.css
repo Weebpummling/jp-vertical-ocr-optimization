@@ -272,3 +272,34 @@ kbd {
 .save__flags p { margin: 0 0 0.3rem; color: var(--suspect); }
 .save__flags ul { margin: 0; padding-left: 1.1rem; }
 .save__flags b { font: 0.9rem var(--font-jp); }
+
+/* ---- difficult-character toolkit ---- */
+.toolkit { margin-top: 0.35rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.toolkit__row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.toolkit__geta {
+  border: 1px dashed var(--suspect);
+  background: #fff;
+  color: var(--suspect);
+  border-radius: 3px;
+  padding: 0.1rem 0.5rem;
+  font: 0.8rem var(--font-jp);
+  cursor: pointer;
+}
+.toolkit__geta:hover { background: #fdf1ea; }
+.toolkit__count { font-size: 0.75rem; color: var(--suspect); }
+.toolkit__label { font-size: 0.75rem; color: var(--muted); }
+.toolkit__swaps { gap: 0.3rem; }
+.toolkit__swap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+}
+.toolkit__swap:hover { border-color: var(--provisional); background: #faf7fd; }
+.toolkit__from { font: 0.95rem var(--font-jp); color: var(--muted); }
+.toolkit__arrow { font-size: 0.7rem; color: var(--muted); }
+.toolkit__to { font: 1.05rem var(--font-jp); color: var(--ink); }

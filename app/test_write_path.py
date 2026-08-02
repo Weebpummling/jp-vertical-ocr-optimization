@@ -166,6 +166,55 @@ class ConstraintTests(TempDatabase):
             self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
 
 
+class UnreadableCharacterTests(TempDatabase):
+    """A character nobody can read must not block the record.
+
+    The reader marks it 〓 and the row saves with everything they *could* see.
+    What must not happen is the server reporting that as a refusal: the value
+    was recorded, and calling it "not recorded" would teach annotators to
+    distrust the flag that does mean something.
+    """
+
+    def setUp(self):
+        super().setUp()
+        import api
+        self.api = api
+
+    def record(self, **body):
+        from api import ObservationIn
+        self.cell()          # an observation hangs off a roster_cell
+        return self.api.create_observation(
+            "test-pid", 1, ObservationIn(row_index=0, **body),
+            {"user_id": self.user_id})
+
+    def test_a_marked_name_is_saved_as_read(self):
+        result = self.record(
+            name_raw="平岩〓一",
+            field_confidence={"name_raw": {"raw": "平岩〓一", "unreadable": 1,
+                                           "crop_url": "https://example/crop.jpg"}})
+        self.assertEqual(result["status"], "draft")
+        with db.read_session() as cur:
+            cur.execute("SELECT name_raw FROM observation")
+            self.assertEqual(cur.fetchone()["name_raw"], "平岩〓一")
+
+    def test_an_unread_character_is_a_recheck_not_a_refusal(self):
+        result = self.record(
+            name_raw="平岩〓一",
+            field_confidence={"name_raw": {"raw": "平岩〓一", "unreadable": 1,
+                                           "crop_url": "https://example/crop.jpg"}})
+        self.assertEqual(result["flagged"], {})
+        self.assertIn("name_raw", result["needs_recheck"])
+        self.assertEqual(result["needs_recheck"]["name_raw"]["crop_url"],
+                         "https://example/crop.jpg")
+
+    def test_a_refused_date_is_still_a_refusal(self):
+        """The two must not collapse into each other."""
+        result = self.record(name_raw="乾忠夫", commissioning_date="明四三、一二")
+        self.assertIn("commissioning_date", result["flagged"])
+        self.assertEqual(result["needs_recheck"], {})
+        self.assertIsNone(result["commissioning_date"])
+
+
 class DateNormalisationTests(unittest.TestCase):
     """The write path must refuse an unclear date, never guess one."""
 

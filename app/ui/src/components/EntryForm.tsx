@@ -17,7 +17,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Cell, Vocab, VocabEntry } from "../api";
 import { resolveVocab, suggestVocab } from "../api";
-import type { SaveState, Values } from "../observation";
+import { GETA, type SaveState, type Values } from "../observation";
+import { DifficultCharacter } from "./DifficultCharacter";
 
 export interface FieldSpec {
   key: string;
@@ -84,12 +85,43 @@ export function EntryForm({
   const composing = useRef(false);
   const [openList, setOpenList] = useState<string | null>(null);
 
+  const pendingCaret = useRef<{ key: string; pos: number } | null>(null);
+
   useEffect(() => {
     inputs.current[activeField]?.focus();
   }, [activeField, officerIndex]);
 
+  // Restore the caret after a toolkit insert, once the new value is on screen.
+  useEffect(() => {
+    const pending = pendingCaret.current;
+    if (!pending) return;
+    pendingCaret.current = null;
+    const input = inputs.current[pending.key];
+    input?.focus();
+    input?.setSelectionRange(pending.pos, pending.pos);
+  });
+
   const cellFor = (spec: FieldSpec) =>
     spec.cell ? cells.find((c) => c.field === spec.cell) : undefined;
+
+  /**
+   * Put the geta mark where the caret is, not at the end.
+   *
+   * A reader hits the unreadable character partway through a name — 平岩〓一 —
+   * so appending would put the mark in the wrong place and quietly misrecord
+   * which character was lost.
+   */
+  const insertGeta = (key: string) => {
+    const input = inputs.current[key];
+    const current = values[key] ?? "";
+    const start = input?.selectionStart ?? current.length;
+    const end = input?.selectionEnd ?? start;
+    onChange(key, current.slice(0, start) + GETA + current.slice(end));
+    // Applied in an effect, not here and not in requestAnimationFrame: the
+    // value on screen is React's, so the caret can only be placed after the
+    // re-render has committed. rAF raced it and left the caret at the end.
+    pendingCaret.current = { key, pos: start + GETA.length };
+  };
 
   const move = (delta: number) => {
     const i = FIELDS.findIndex((f) => f.key === activeField);
@@ -111,6 +143,11 @@ export function EntryForm({
     // The IME owns these keys while it is converting. Never pre-empt it.
     if (composing.current || e.nativeEvent.isComposing) return;
 
+    if (e.altKey && (e.key === "g" || e.key === "G")) {
+      e.preventDefault();      // a character that cannot be read
+      insertGeta(spec.key);
+      return;
+    }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();      // record without leaving the field
       onCommit();
@@ -160,7 +197,8 @@ export function EntryForm({
           <span className="muted"> / {officerCount}</span>
         </h2>
         <p className="keys">
-          <kbd>Enter</kbd> next field · <kbd>Alt</kbd>+<kbd>↓</kbd>/<kbd>↑</kbd> next/prev officer
+          <kbd>Enter</kbd> next field · <kbd>Alt</kbd>+<kbd>↓</kbd>/<kbd>↑</kbd> next/prev
+          officer · <kbd>Alt</kbd>+<kbd>G</kbd> can’t read a character
         </p>
       </header>
 
@@ -218,6 +256,15 @@ export function EntryForm({
                 onChange={(e) => onChange(spec.key, e.target.value)}
                 onKeyDown={(e) => onKeyDown(e, spec)}
               />
+
+              {activeField === spec.key && (
+                <DifficultCharacter
+                  value={typed}
+                  vocab={vocab}
+                  onChange={(next) => onChange(spec.key, next)}
+                  onGeta={() => insertGeta(spec.key)}
+                />
+              )}
 
               {spec.hint && <p className="hint">{spec.hint}</p>}
               {resolved && (

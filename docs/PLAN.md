@@ -164,9 +164,21 @@ the observed officers/hour recorded as the baseline all later phases are judged 
 - [x] Era-date normalizer (`reading/eradate.py`): 明治/大正/昭和 + kanji numerals in
       the roster's digit-juxtaposition notation → canonical dates; era bounds
       enforced; every ambiguous parse refused with a recorded reason.
-- [ ] Difficult-character toolkit: variant palette (kyūjitai↔shinjitai), radical/IDS
-      lookup, and attach-the-cropped-glyph so an unreadable character never blocks a record.
-- [ ] Per-character uncertainty capture; one-click seal/damage flag → alt-scan flip.
+- [x] Difficult-character toolkit (`app/ui/src/components/DifficultCharacter.tsx`):
+      kyūjitai↔shinjitai variant palette driven by the frozen variant table, offering
+      only the swaps present in what was typed, in both directions; and 〓 (the geta
+      mark, <kbd>Alt</kbd>+<kbd>G</kbd>) at the caret for a character that cannot be
+      read at all. The record saves with everything the reader *could* see and carries
+      the count of unread characters plus the IIIF crop they sit in, so it is
+      re-checked against the image rather than re-transcribed. **Radical/IDS lookup is
+      deliberately not built** — it needs an external character-decomposition dataset,
+      and no reading has yet failed that the palette and the geta mark cannot get past.
+- [x] Per-character uncertainty capture — an unread character is marked in place, so
+      uncertainty is recorded at the character, not smeared over the whole field. A
+      marked field is reported as `needs_recheck`, never as a refusal: it *was*
+      recorded, and calling it "not recorded" would teach annotators to distrust the
+      flag that matters.
+- [ ] One-click seal/damage flag → alt-scan flip.
 - [x] First Shōwa seniority-list template, productionized from Spike C's hand-built grid
       (`templates/showa-teinen-meibo-A.json` + `reading/registration.py`): 12-band grid
       derived from 7 panels of pid 1449426, page classification with three measured gates
