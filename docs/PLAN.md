@@ -81,7 +81,7 @@ changes the architecture. Test them **before** committing build-weeks on top of 
 
 ## Phase 0 — Foundations (weeks 1–4) · *current*
 
-**Delivers:** schema, Docker environment, auth, ingestion skeleton, worklist + NDL IIIF
+**Delivers:** schema, environment, identity, ingestion skeleton, worklist + NDL IIIF
 retrieval, ground truth registered, spikes A–D answered.
 
 **Exit criterion:** any page is zoomable and provenanced; ground truth is loaded with its
@@ -96,16 +96,20 @@ train/hold-out split fixed; all four spikes have written answers.
       folds 戰/聯/臺 added. 法務部/技術部 dropped by the lead's decision (zero
       in-window occurrences). **Vocabularies frozen 31 Jul 2026**: 11 ranks,
       14 branches, 28 variants.
-- [x] Docker Compose running on the lead's machine: Postgres 16 core with schema
-      init and guarded data volume; stack verified healthy with vocabularies
-      loaded and three volumes registered.
+- [x] Database running: originally Postgres 16 under Docker Compose, **replaced by a
+      single SQLite file on 2 Aug 2026** (decision 9). No server, no container, no
+      credentials — `<data home>\officer-index.db`, with 3,565 rows migrated across.
 - [x] **Backups: removed entirely** (lead, 2 Aug 2026 — decision 8). Both scheduled
       tasks unregistered, both scripts deleted, all copies removed. One copy of the
       data lives in the data home.
-- [x] Audit logging wired as Postgres triggers (not app-layer) so no write path can
-      bypass it — full before/after images, append-only log, TRUNCATE refused;
-      guarantees asserted by `db/audit_check.sql` in CI on every push.
-- [x] CI on every push: schema applies to a fresh Postgres 16; vocab invariants linted
+- [x] Work is attributed. Originally Postgres audit triggers keeping full before/after
+      row images; **replaced 2 Aug 2026 by `work_log`** — who recorded what, when, on
+      which page — written by the application in the same transaction as the work.
+      The provenance of a value still lives on the row: `observation` carries
+      `author_user_id`, `created_at` and `status`. The before/after images were a
+      compliance-grade guarantee nobody asked for; a readable work log is what was.
+- [x] CI on every push: the schema builds a fresh database, vocabularies load, and both
+      test suites run — with no service container, so CI does exactly what a laptop does
       (`.github/workflows/ci.yml`, `scripts/lint_vocab.py`).
 - [~] Worklist registry: roster PIDs 1914–1936 seeded (`ingestion/worklist-roster.csv`);
       Shōwa-era reserve-list editions and 号外 enumeration still to add.
@@ -305,6 +309,7 @@ Settled with the project lead, 29 July 2026; later decisions carry their own dat
 | 4 | **Private data home** | Lead's personal machine, outside this repo's working tree | Fixed local path convention, documented in `docs/`; included in the local backup snapshot; never referenced by absolute path from committed code |
 | 5 | **Academy dataset** | Lead provides it personally | Spike D reduces to a handoff: get the file, confirm the blocking keys (name + commissioning date/cohort + branch) |
 | 6 | **NDL/JACAR bulk access** | Research use; special permission unlikely to be needed | Spike B still records observed rate behavior and terms so retrieval stays polite and defensible |
+| 9 | **The database is a file** (2 Aug 2026) | **SQLite, not Postgres. Docker removed.** One `officer-index.db` you can copy | The deliverable is the officer record, and the requirements on it are that it be easily shared, easily interacted with, and easily accessible for further research. A server on one machine fails all three; a file is opened by DB Browser, pandas, R and Excel with nothing installed. It also makes the working pattern possible: someone transcribes on their machine and hands back a file to merge. Migrated with 3,565 rows on the day the decision was made, when the cost was near zero. `scripts/export_record.py` writes the record and work log as CSV alongside it |
 | 8 | **Backups** (2 Aug 2026) | **Removed entirely.** No scheduled tasks, no scripts, no second copies anywhere | Every operational failure this project has hit came from the backup machinery, which was protecting ~112 MB of static files and a database holding two rows. The sources are online and the tools here regenerate what is derived from them; the workbook and scans have originals outside this machine. One copy of the data, in the data home. This supersedes the "database loss" mitigation in the risk table below |
 
 Hold-out enforcement (from the ground-truth split spec) is owned by the lead.

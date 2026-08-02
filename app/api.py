@@ -263,10 +263,10 @@ def create_cells(pid: str, frame: int, panel: int = Query(0, ge=0),
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     payload = registered.as_dict()
-    cells = db.upsert_cells(str(page["page_id"]), payload["officers"],
-                            str(user["user_id"]))
-    return {"page_id": str(page["page_id"]), "template_id": payload["template_id"],
-            "cells": [{**c, "cell_id": str(c["cell_id"])} for c in cells]}
+    cells = db.upsert_cells(page["page_id"], payload["officers"],
+                            user["user_id"], volume_pid=pid, frame_no=frame)
+    return {"page_id": page["page_id"], "template_id": payload["template_id"],
+            "cells": cells}
 
 
 @app.post("/volumes/{pid}/pages/{frame}/observations", status_code=201)
@@ -281,7 +281,7 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
                    f"as_of_date; run scripts/backfill_edition_dates.py")
 
     with db.read_session() as cur:
-        cur.execute("SELECT cell_id FROM roster_cell WHERE page_id = %s AND row_index = %s",
+        cur.execute("SELECT cell_id FROM roster_cell WHERE page_id = ? AND row_index = ?",
                     (page["page_id"], body.row_index))
         cell = cur.fetchone()
     if not cell:
@@ -311,13 +311,13 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
     values["field_confidence"] = confidence
 
     saved = db.create_observation(
-        page_id=str(page["page_id"]), cell_id=str(cell["cell_id"]),
-        as_of_date=page["edition_date"], user_id=str(user["user_id"]),
-        values=values)
+        page_id=page["page_id"], cell_id=cell["cell_id"],
+        as_of_date=page["edition_date"], user_id=user["user_id"],
+        values=values, volume_pid=pid, frame_no=frame, row_index=body.row_index)
     return {
-        "obs_id": str(saved["obs_id"]),
+        "obs_id": saved["obs_id"],
         "status": saved["status"],
-        "as_of_date": page["edition_date"].isoformat(),
+        "as_of_date": page["edition_date"],
         "commissioning_date": parsed_date.isoformat() if parsed_date else None,
         "flagged": {k: v for k, v in confidence.items() if isinstance(v, dict)},
     }
@@ -326,13 +326,9 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
 @app.get("/volumes/{pid}/pages/{frame}/observations")
 def list_observations(pid: str, frame: int) -> dict:
     page = _require_page(pid, frame)
-    rows = db.observations_for_page(str(page["page_id"]))
-    for row in rows:
-        row["obs_id"] = str(row["obs_id"])
-        row["cell_id"] = str(row["cell_id"])
-        row["created_at"] = row["created_at"].isoformat()
-        if row["commissioning_date"]:
-            row["commissioning_date"] = row["commissioning_date"].isoformat()
+    # Everything is already a string: SQLite stores dates and timestamps as
+    # ISO-8601 text, so there is nothing to serialize on the way out.
+    rows = db.observations_for_page(page["page_id"])
     return {"page_id": str(page["page_id"]), "observations": rows}
 
 

@@ -149,10 +149,11 @@ a bearer secret.
 Setup, once:
 
 ```bash
-docker compose up -d                                   # Postgres
-python ingestion/iiif_client.py register <pid> | psql   # register a volume
-python scripts/backfill_edition_dates.py --apply        # observations need as_of_date
-python scripts/issue_access_code.py "Your Name"         # your own code
+python -c "import sys; sys.path.insert(0,'app'); import db; db.create(db.db_path()).close()"
+python scripts/load_vocab.py                       # rank/branch FKs; nothing saves without them
+python ingestion/iiif_client.py register <pid>     # register a volume
+python scripts/backfill_edition_dates.py --apply   # observations need as_of_date
+python scripts/issue_access_code.py "Your Name"    # your own code
 ```
 
 The very first code is a bootstrap — there is nobody to attribute the insert to,

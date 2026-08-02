@@ -1,80 +1,158 @@
 """Database access for the workstation.
 
-One rule governs this module: **every write is attributable.** The audit
-triggers take their actor from `current_setting('app.user_id')` (db/schema.sql),
-so a write that does not set it lands in `audit_log` with a NULL actor - an
-unattributable change to the most expensive thing the project owns, human
-transcription. `actor_session()` is therefore the only sanctioned way to write,
-and it sets the actor inside the same transaction as the write.
+The database is a single SQLite file. That is the whole point of it: the
+project's deliverable is the officer record itself, and it has to be shareable,
+openable and readable by people who are not running this code. A file can be
+copied into a shared folder, opened in DB Browser, and read by pandas, R or
+Excel. A server cannot.
 
-Connection settings come from the environment so no credential is committed:
+Where it lives:
 
-    JPOCR_DSN                       full libpq connection string, or
-    POSTGRES_{DB,USER,PASSWORD}     the docker-compose variables, plus
-    JPOCR_DB_HOST / JPOCR_DB_PORT   (default 127.0.0.1:5432)
+    JPOCR_DB        full path to the .db file, or
+    JP_OCR_DATA     the data home; the file is <data home>/officer-index.db
+
+Two rules survive from the Postgres original because they are about the data,
+not the engine:
+
+* **Every write is attributed.** `actor_session()` is the only sanctioned way to
+  write, and it records the worker in `work_log` in the same transaction. The
+  provenance of a value also lives on the row: `observation` carries
+  `author_user_id`, `created_at` and `status`.
+* **Foreign keys are enforced.** SQLite has them off by default, which would
+  silently allow an observation to point at a cell that does not exist.
+
+Journal mode is left at the default rather than WAL: WAL writes `-wal` and
+`-shm` sidecar files, and a database you have to remember to checkpoint before
+copying is not a database you can casually share.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import sqlite3
+import uuid
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Iterator
 
-import psycopg
-from psycopg.rows import dict_row
+ROOT = Path(__file__).resolve().parent.parent
+SCHEMA = ROOT / "db" / "schema.sql"
 
 
 class NotConfigured(RuntimeError):
-    """No database credentials in the environment."""
+    """Nowhere to put the database file."""
 
 
-def dsn() -> str:
-    explicit = os.environ.get("JPOCR_DSN")
+def db_path() -> str:
+    """Where the database file is.
+
+    A `file:` URI is passed through to SQLite untouched, which is how the tests
+    run against a shared in-memory database instead of writing a file per test.
+    """
+    explicit = os.environ.get("JPOCR_DB")
     if explicit:
         return explicit
-    password = os.environ.get("POSTGRES_PASSWORD")
-    if not password:
+    home = os.environ.get("JP_OCR_DATA")
+    if not home:
         raise NotConfigured(
-            "set JPOCR_DSN, or POSTGRES_PASSWORD as in .env (see docs/SETUP.md)")
-    return (
-        f"host={os.environ.get('JPOCR_DB_HOST', '127.0.0.1')} "
-        f"port={os.environ.get('JPOCR_DB_PORT', '5432')} "
-        f"dbname={os.environ.get('POSTGRES_DB', 'jpocr')} "
-        f"user={os.environ.get('POSTGRES_USER', 'jpocr')} "
-        f"password={password}"
-    )
+            "set JPOCR_DB to the database file, or JP_OCR_DATA to the data home "
+            "(see docs/SETUP.md)")
+    return str(Path(home) / "officer-index.db")
 
 
-def connect() -> psycopg.Connection:
-    return psycopg.connect(dsn(), row_factory=dict_row)
+def new_id() -> str:
+    """A fresh row id.
+
+    Ids stay uuids rather than autoincrement integers because copies of this
+    file get merged: two people transcribing on two machines must be able to
+    hand their work back without colliding.
+    """
+    return str(uuid.uuid4())
+
+
+def connect(path: str | Path | None = None) -> sqlite3.Connection:
+    target = str(path) if path else db_path()
+    conn = sqlite3.connect(target, isolation_level="DEFERRED",
+                           uri=target.startswith("file:"))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def create(path: str | Path) -> sqlite3.Connection:
+    """Create a database with the schema applied, and return it open.
+
+    The caller owns the returned connection and must close it -- or, for an
+    in-memory database, must hold it open for as long as the database should
+    exist.
+    """
+    conn = connect(path)
+    conn.executescript(SCHEMA.read_text(encoding="utf-8"))
+    conn.commit()
+    return conn
 
 
 @contextmanager
-def read_session() -> Iterator[psycopg.Cursor]:
-    """A read-only cursor. No actor needed: reads are not audited."""
-    with connect() as conn, conn.cursor() as cur:
-        yield cur
+def session(path: str | Path | None = None) -> Iterator[sqlite3.Connection]:
+    """A connection that commits on success, rolls back on error, and closes.
+
+    `with sqlite3.connect(...) as conn` does the first two and **not** the third,
+    which on Windows leaves the file locked against the next writer. Use this for
+    writes that belong to no particular worker - loading vocabularies from the
+    versioned CSVs, registering a volume from a manifest.
+    """
+    conn = connect(path)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 @contextmanager
-def actor_session(user_id: str) -> Iterator[psycopg.Cursor]:
+def read_session(path: str | Path | None = None) -> Iterator[sqlite3.Cursor]:
+    """A read-only cursor. No actor needed: reads are not logged."""
+    conn = connect(path)
+    try:
+        yield conn.cursor()
+    finally:
+        conn.close()
+
+
+@contextmanager
+def actor_session(user_id: str, path: str | Path | None = None) -> Iterator[sqlite3.Cursor]:
     """A transaction whose writes are attributed to `user_id`.
 
-    The setting is transaction-scoped, so a pooled or reused connection cannot
-    leak one annotator's identity into another's writes. The transaction commits
-    on clean exit and rolls back on exception, which keeps the audit log and the
-    data it describes in step.
-
-    `set_config(..., is_local => true)` rather than `SET LOCAL`: the latter is
-    utility syntax and takes no bind parameter, so passing a user id would mean
-    interpolating it into SQL.
+    Commits on clean exit, rolls back on exception, so the work log and the data
+    it describes can never disagree.
     """
     if not user_id:
         raise ValueError("actor_session requires a user_id; unattributed writes are not allowed")
-    with connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT set_config('app.user_id', %s, true)", (str(user_id),))
-            yield cur
+    conn = connect(path)
+    try:
+        cur = conn.cursor()
+        yield cur
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def log_work(cur: sqlite3.Cursor, user_id: str, action: str, *,
+             volume_pid: str | None = None, frame_no: int | None = None,
+             row_index: int | None = None, detail: dict | None = None) -> None:
+    """Record one piece of work done. Called inside the caller's transaction."""
+    cur.execute(
+        "INSERT INTO work_log (user_id, action, volume_pid, frame_no, row_index, detail) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, action, volume_pid, frame_no, row_index,
+         json.dumps(detail, ensure_ascii=False) if detail else None))
 
 
 # --------------------------------------------------------------------------
@@ -85,14 +163,15 @@ def find_user(access_code: str) -> dict | None:
     """Resolve an id code to the worker it belongs to.
 
     The code *is* the identifier (docs/decision-workstation-auth.md), so it lives
-    in `app_user.login` and no schema change was needed. Callers should treat the
-    returned `login` as a secret and show `display_name` instead.
+    in `app_user.login`. Callers should treat the returned `login` as a secret
+    and show `display_name` instead.
     """
     with read_session() as cur:
         cur.execute(
-            "SELECT user_id, login, display_name FROM app_user WHERE login = %s",
+            "SELECT user_id, login, display_name FROM app_user WHERE login = ?",
             (access_code,))
-        return cur.fetchone()
+        row = cur.fetchone()
+        return dict(row) if row else None
 
 
 def find_page(pid: str, frame: int) -> dict | None:
@@ -102,11 +181,12 @@ def find_page(pid: str, frame: int) -> dict | None:
             """
             SELECT p.page_id, p.frame_no, v.volume_id, v.pid, v.title, v.edition_date
               FROM source_page p
-              JOIN source_volume v USING (volume_id)
-             WHERE v.pid = %s AND p.frame_no = %s
+              JOIN source_volume v ON v.volume_id = p.volume_id
+             WHERE v.pid = ? AND p.frame_no = ?
             """,
             (pid, frame))
-        return cur.fetchone()
+        row = cur.fetchone()
+        return dict(row) if row else None
 
 
 def ensure_template(spec: dict, user_id: str) -> str:
@@ -116,36 +196,38 @@ def ensure_template(spec: dict, user_id: str) -> str:
     database so `source_page.template_id` can reference a real row. Matched by
     name, because the artifact's own id is the stable human-facing handle.
     """
+    column_spec = json.dumps({
+        "band_fracs": spec["band_fracs"],
+        "fields": spec.get("fields", []),
+        "columns": spec.get("columns", {}),
+    }, ensure_ascii=False)
+    row_spec = json.dumps(spec.get("match", {}), ensure_ascii=False)
     with actor_session(user_id) as cur:
-        cur.execute("SELECT template_id FROM layout_template WHERE name = %s",
+        cur.execute("SELECT template_id FROM layout_template WHERE name = ?",
                     (spec["template_id"],))
         row = cur.fetchone()
-        column_spec = psycopg.types.json.Json({
-            "band_fracs": spec["band_fracs"],
-            "fields": spec.get("fields", []),
-            "columns": spec.get("columns", {}),
-        })
-        row_spec = psycopg.types.json.Json(spec.get("match", {}))
         if row:
             cur.execute(
-                "UPDATE layout_template SET column_spec = %s, row_spec = %s, "
-                "era = %s, series = %s, notes = %s WHERE template_id = %s",
+                "UPDATE layout_template SET column_spec = ?, row_spec = ?, "
+                "era = ?, series = ?, notes = ? WHERE template_id = ?",
                 (column_spec, row_spec, spec.get("era"), spec.get("series"),
                  spec.get("description"), row["template_id"]))
-            return str(row["template_id"])
+            return row["template_id"]
+        template_id = new_id()
         cur.execute(
-            "INSERT INTO layout_template (name, series, era, column_spec, row_spec, notes) "
-            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING template_id",
-            (spec["template_id"], spec.get("series"), spec.get("era"),
+            "INSERT INTO layout_template (template_id, name, series, era, column_spec, row_spec, notes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (template_id, spec["template_id"], spec.get("series"), spec.get("era"),
              column_spec, row_spec, spec.get("description")))
-        return str(cur.fetchone()["template_id"])
+        return template_id
 
 
 # --------------------------------------------------------------------------
 # writes
 # --------------------------------------------------------------------------
 
-def upsert_cells(page_id: str, officers: list[dict], user_id: str) -> list[dict]:
+def upsert_cells(page_id: str, officers: list[dict], user_id: str,
+                 volume_pid: str | None = None, frame_no: int | None = None) -> list[dict]:
     """Materialize one `roster_cell` per officer strip on a page.
 
     Idempotent on (page_id, row_index): re-registering a page refreshes the
@@ -157,48 +239,60 @@ def upsert_cells(page_id: str, officers: list[dict], user_id: str) -> list[dict]
         for officer in officers:
             cur.execute(
                 """
-                INSERT INTO roster_cell (page_id, row_index, crop_bbox, crop_url)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO roster_cell (cell_id, page_id, row_index, crop_bbox, crop_url)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT (page_id, row_index)
-                DO UPDATE SET crop_bbox = EXCLUDED.crop_bbox,
-                              crop_url  = EXCLUDED.crop_url
+                DO UPDATE SET crop_bbox = excluded.crop_bbox,
+                              crop_url  = excluded.crop_url
                 RETURNING cell_id, row_index, crop_bbox, audit_status
                 """,
-                (page_id, officer["index"], list(officer["bbox"]),
-                 officer.get("crop_url")))
-            saved.append(dict(cur.fetchone()))
+                (new_id(), page_id, officer["index"],
+                 json.dumps(list(officer["bbox"])), officer.get("crop_url")))
+            row = dict(cur.fetchone())
+            row["crop_bbox"] = json.loads(row["crop_bbox"])
+            saved.append(row)
+        log_work(cur, user_id, "register_cells", volume_pid=volume_pid,
+                 frame_no=frame_no, detail={"cells": len(saved)})
     return saved
 
 
 def create_observation(*, page_id: str, cell_id: str, as_of_date, user_id: str,
-                       values: dict) -> dict:
+                       values: dict, volume_pid: str | None = None,
+                       frame_no: int | None = None, row_index: int | None = None) -> dict:
     """Record one officer as read by a human.
 
     Always `status = 'draft'`: confirmation is a separate, deliberate act, and
     nothing machine-derived reaches this table at all. `author_user_id` is the
-    person the API authenticated, never a value supplied by the caller.
+    worker whose id code the API resolved, never a value supplied by the caller.
     """
+    obs_id = new_id()
+    commissioning = values.get("commissioning_date")
     with actor_session(user_id) as cur:
         cur.execute(
             """
             INSERT INTO observation
-                (page_id, cell_id, name_raw, rank_code, branch_code, post,
+                (obs_id, page_id, cell_id, name_raw, rank_code, branch_code, post,
                  seniority_no, commissioning_date, as_of_date,
                  field_confidence, author_user_id, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
             RETURNING obs_id, status, created_at
             """,
-            (page_id, cell_id,
+            (obs_id, page_id, cell_id,
              values.get("name_raw"), values.get("rank_code"),
              values.get("branch_code"), values.get("post"),
-             values.get("seniority_no"), values.get("commissioning_date"),
-             as_of_date,
-             psycopg.types.json.Json(values.get("field_confidence") or {}),
+             values.get("seniority_no"),
+             commissioning.isoformat() if hasattr(commissioning, "isoformat") else commissioning,
+             as_of_date.isoformat() if hasattr(as_of_date, "isoformat") else as_of_date,
+             json.dumps(values.get("field_confidence") or {}, ensure_ascii=False),
              user_id))
-        return dict(cur.fetchone())
+        saved = dict(cur.fetchone())
+        log_work(cur, user_id, "record_officer", volume_pid=volume_pid,
+                 frame_no=frame_no, row_index=row_index,
+                 detail={"name_raw": values.get("name_raw")})
+    return saved
 
 
-def observations_for_page(page_id: str, cur: psycopg.Cursor | None = None) -> list[dict]:
+def observations_for_page(page_id: str, cur: sqlite3.Cursor | None = None) -> list[dict]:
     """What has been recorded for a page.
 
     `cur` lets a caller run this inside an existing transaction - which is how
@@ -214,9 +308,9 @@ def observations_for_page(page_id: str, cur: psycopg.Cursor | None = None) -> li
                    -- other worker on the page.
                    COALESCE(u.display_name, '(unnamed)') AS author
               FROM observation o
-              JOIN roster_cell c USING (cell_id)
+              JOIN roster_cell c ON c.cell_id = o.cell_id
          LEFT JOIN app_user u ON u.user_id = o.author_user_id
-             WHERE o.page_id = %s
+             WHERE o.page_id = ?
           ORDER BY c.row_index
     """
     if cur is not None:
@@ -229,5 +323,6 @@ def observations_for_page(page_id: str, cur: psycopg.Cursor | None = None) -> li
 
 def set_volume_edition_date(volume_id: str, edition_date, user_id: str) -> None:
     with actor_session(user_id) as cur:
-        cur.execute("UPDATE source_volume SET edition_date = %s WHERE volume_id = %s",
-                    (edition_date, volume_id))
+        cur.execute("UPDATE source_volume SET edition_date = ? WHERE volume_id = ?",
+                    (edition_date.isoformat() if hasattr(edition_date, "isoformat")
+                     else edition_date, volume_id))

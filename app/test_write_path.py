@@ -1,15 +1,16 @@
 """Tests for the write side.
 
-These need a live database, so they skip without one rather than fail: CI runs
-the schema job separately and a developer without the stack up should still get
-a green suite. What they pin is the part that is easy to lose quietly -
-attribution, refusal-over-guessing, and idempotency.
+These used to skip whenever a database was not running, which meant the rules
+they pin were unverified exactly when someone was least likely to notice. The
+database is a file now, so every test here builds one in a temp directory and
+runs for real - in CI, on a laptop, always.
 
-Everything runs inside a transaction that is rolled back, so the tests never
-leave rows behind.
+What they pin is what is easy to lose quietly: attribution, refusal over
+guessing, idempotency, and the constraints that stop a bad row existing at all.
 """
 
 import os
+import sqlite3
 import sys
 import unittest
 import uuid
@@ -17,151 +18,156 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "app"))
 sys.path.insert(0, str(ROOT / "reading"))
 
+import db  # noqa: E402
 import eradate  # noqa: E402
 
-try:
-    import db
-    import psycopg
-    _IMPORT_ERROR = None
-except Exception as exc:  # pragma: no cover - environment dependent
-    _IMPORT_ERROR = exc
 
+class TempDatabase(unittest.TestCase):
+    """A fresh database per test, pointed at by JPOCR_DB.
 
-def database_available() -> bool:
-    if _IMPORT_ERROR is not None:
-        return False
-    try:
-        with db.connect() as conn:
-            conn.execute("SELECT 1")
-        return True
-    except Exception:
-        return False
-
-
-AVAILABLE = database_available()
-
-
-@unittest.skipUnless(AVAILABLE, "no database (set JPOCR_DSN or POSTGRES_PASSWORD)")
-class ActorAttributionTests(unittest.TestCase):
-    """The audit triggers read the actor from a session setting.
-
-    A write that forgets to set it is recorded with a NULL actor, which is an
-    unattributable change to the project's most expensive asset. These tests
-    exist so that regression is loud.
+    In memory, not on disk. Every db.* call opens its own connection, so the
+    database is a shared-cache `file:` URI that they all resolve to, kept alive
+    by the one connection held here. Writing a real file per test cost about
+    three seconds each on Windows - the antivirus scans every new database - and
+    left locked files behind that broke temp-directory cleanup.
     """
 
     def setUp(self):
-        self.conn = db.connect()
-        self.conn.autocommit = False
-        self.addCleanup(self.conn.close)
-        self.addCleanup(self.conn.rollback)
-        self.cur = self.conn.cursor()
-        self.cur.execute(
-            "INSERT INTO app_user (login, display_name, role) VALUES (%s,%s,'annotator') "
-            "RETURNING user_id", (f"test-{uuid.uuid4().hex[:8]}", "Test"))
-        self.user_id = str(self.cur.fetchone()["user_id"])
+        self.uri = f"file:test-{uuid.uuid4().hex}?mode=memory&cache=shared"
+        previous = os.environ.get("JPOCR_DB")
+        os.environ["JPOCR_DB"] = self.uri
 
-    def test_setting_scopes_to_the_transaction(self):
-        self.cur.execute("SELECT set_config('app.user_id', %s, true)", (self.user_id,))
-        self.cur.execute("SELECT current_setting('app.user_id', true) AS v")
-        self.assertEqual(self.cur.fetchone()["v"], self.user_id)
+        # Last connection out destroys a shared-cache memory database, so this
+        # one stays open for the lifetime of the test.
+        self.keepalive = db.create(self.uri)
 
-    def test_write_without_the_setting_has_no_actor(self):
-        """Documents the failure mode the helper exists to prevent."""
-        self.cur.execute("SELECT set_config('app.user_id', '', true)")
-        self.cur.execute(
-            "INSERT INTO source_volume (title, pid) VALUES ('t', %s) RETURNING volume_id",
-            (f"test-{uuid.uuid4().hex[:8]}",))
-        vol = self.cur.fetchone()["volume_id"]
-        self.cur.execute(
-            "SELECT actor FROM audit_log WHERE table_name='source_volume' AND row_id=%s",
-            (vol,))
-        self.assertIsNone(self.cur.fetchone()["actor"])
+        def restore():
+            self.keepalive.close()
+            if previous is None:
+                os.environ.pop("JPOCR_DB", None)
+            else:
+                os.environ["JPOCR_DB"] = previous
 
-    def test_write_with_the_setting_is_attributed(self):
-        self.cur.execute("SELECT set_config('app.user_id', %s, true)", (self.user_id,))
-        self.cur.execute(
-            "INSERT INTO source_volume (title, pid) VALUES ('t', %s) RETURNING volume_id",
-            (f"test-{uuid.uuid4().hex[:8]}",))
-        vol = self.cur.fetchone()["volume_id"]
-        self.cur.execute(
-            "SELECT actor FROM audit_log WHERE table_name='source_volume' AND row_id=%s",
-            (vol,))
-        self.assertEqual(str(self.cur.fetchone()["actor"]), self.user_id)
+        self.addCleanup(restore)
+        self.seed()
+
+    def seed(self):
+        """One worker, one volume, one page, one rank - enough to write against."""
+        self.user_id = db.new_id()
+        self.volume_id = db.new_id()
+        self.page_id = db.new_id()
+        with db.session() as conn:
+            conn.execute(
+                "INSERT INTO app_user (user_id, login, display_name) VALUES (?,?,?)",
+                (self.user_id, "JP-TEST-CODE-0001", "Alice Tanaka"))
+            conn.execute(
+                "INSERT INTO source_volume (volume_id, title, pid, edition_date) "
+                "VALUES (?,'t','test-pid','1933-09-01')", (self.volume_id,))
+            conn.execute(
+                "INSERT INTO source_page (page_id, volume_id, frame_no) VALUES (?,?,1)",
+                (self.page_id, self.volume_id))
+            conn.execute(
+                "INSERT INTO rank_vocab (rank_code, label_ja, seniority_order) "
+                "VALUES ('taisa','大佐',7)")
+
+    def cell(self, row_index=0):
+        cells = db.upsert_cells(self.page_id, [{"index": row_index, "bbox": [1, 2, 3, 4]}],
+                                self.user_id)
+        return cells[0]["cell_id"]
+
+
+class AttributionTests(TempDatabase):
+    """Every write is recorded to the worker who made it."""
 
     def test_actor_session_refuses_an_empty_user(self):
         with self.assertRaises(ValueError):
             with db.actor_session(""):
                 pass
 
+    def test_recording_an_officer_logs_the_work(self):
+        cell = self.cell()
+        db.create_observation(page_id=self.page_id, cell_id=cell,
+                              as_of_date=date(1933, 9, 1), user_id=self.user_id,
+                              values={"name_raw": "平岩棟一"},
+                              volume_pid="test-pid", frame_no=1, row_index=0)
+        with db.read_session() as cur:
+            cur.execute("SELECT user_id, action, volume_pid, frame_no, row_index "
+                        "FROM work_log WHERE action = 'record_officer'")
+            row = cur.fetchone()
+        self.assertEqual(row["user_id"], self.user_id)
+        self.assertEqual((row["volume_pid"], row["frame_no"], row["row_index"]),
+                         ("test-pid", 1, 0))
 
-@unittest.skipUnless(AVAILABLE, "no database")
-class CellAndObservationTests(unittest.TestCase):
-    def setUp(self):
-        self.conn = db.connect()
-        self.conn.autocommit = False
-        self.addCleanup(self.conn.close)
-        self.addCleanup(self.conn.rollback)
-        self.cur = self.conn.cursor()
-        suffix = uuid.uuid4().hex[:8]
-        self.cur.execute(
-            "INSERT INTO app_user (login, display_name, role) VALUES (%s,'T','annotator') "
-            "RETURNING user_id", (f"test-{suffix}",))
-        self.user_id = str(self.cur.fetchone()["user_id"])
-        self.cur.execute(
-            "INSERT INTO source_volume (title, pid, edition_date) "
-            "VALUES ('t', %s, DATE '1933-09-01') RETURNING volume_id", (f"test-{suffix}",))
-        vol = self.cur.fetchone()["volume_id"]
-        self.cur.execute(
-            "INSERT INTO source_page (volume_id, frame_no) VALUES (%s, 1) RETURNING page_id",
-            (vol,))
-        self.page_id = self.cur.fetchone()["page_id"]
+    def test_the_observation_itself_carries_its_author(self):
+        cell = self.cell()
+        db.create_observation(page_id=self.page_id, cell_id=cell,
+                              as_of_date="1933-09-01", user_id=self.user_id,
+                              values={"name_raw": "乾忠夫"})
+        with db.read_session() as cur:
+            cur.execute("SELECT author_user_id, status FROM observation")
+            row = cur.fetchone()
+        self.assertEqual(row["author_user_id"], self.user_id)
+        self.assertEqual(row["status"], "draft")
 
-    def _cell(self, row_index=0):
-        self.cur.execute(
-            "INSERT INTO roster_cell (page_id, row_index, crop_bbox) "
-            "VALUES (%s, %s, %s) RETURNING cell_id",
-            (self.page_id, row_index, [1, 2, 3, 4]))
-        return self.cur.fetchone()["cell_id"]
+    def test_a_failed_write_leaves_no_log_behind(self):
+        """The log and the data it describes can never disagree."""
+        with self.assertRaises(sqlite3.IntegrityError):
+            db.create_observation(page_id=self.page_id, cell_id="no-such-cell",
+                                  as_of_date="1933-09-01", user_id=self.user_id,
+                                  values={"name_raw": "x"})
+        with db.read_session() as cur:
+            cur.execute("SELECT count(*) AS n FROM work_log")
+            self.assertEqual(cur.fetchone()["n"], 0)
 
-    def test_cells_are_unique_per_row_index(self):
-        """Re-registering a page must refresh geometry, not duplicate officers."""
-        self._cell(0)
-        with self.assertRaises(psycopg.errors.UniqueViolation):
-            self._cell(0)
 
-    def test_observation_defaults_to_draft(self):
-        cell = self._cell(0)
-        self.cur.execute(
-            "INSERT INTO observation (page_id, cell_id, name_raw, as_of_date, author_user_id) "
-            "VALUES (%s,%s,'x',DATE '1933-09-01',%s) RETURNING status",
-            (self.page_id, cell, self.user_id))
-        self.assertEqual(self.cur.fetchone()["status"], "draft")
+class ConstraintTests(TempDatabase):
+    """Rows that should not be able to exist."""
+
+    def test_cells_are_idempotent_per_row_index(self):
+        """Re-registering a page refreshes geometry, never duplicates officers."""
+        db.upsert_cells(self.page_id, [{"index": 0, "bbox": [1, 2, 3, 4]}], self.user_id)
+        db.upsert_cells(self.page_id, [{"index": 0, "bbox": [9, 9, 9, 9]}], self.user_id)
+        with db.read_session() as cur:
+            cur.execute("SELECT crop_bbox, count(*) AS n FROM roster_cell")
+            row = cur.fetchone()
+        self.assertEqual(row["n"], 1)
+        self.assertEqual(row["crop_bbox"], "[9, 9, 9, 9]")
 
     def test_observation_requires_a_snapshot_date(self):
         """as_of_date is what makes an observation mean anything in the panel."""
-        cell = self._cell(0)
-        with self.assertRaises(psycopg.errors.NotNullViolation):
-            self.cur.execute(
-                "INSERT INTO observation (page_id, cell_id, name_raw, author_user_id) "
-                "VALUES (%s,%s,'x',%s)", (self.page_id, cell, self.user_id))
+        cell = self.cell()
+        with self.assertRaises(sqlite3.IntegrityError) as caught:
+            with db.session() as conn:
+                conn.execute("INSERT INTO observation (obs_id, page_id, cell_id, name_raw) "
+                             "VALUES (?,?,?,'x')", (db.new_id(), self.page_id, cell))
+        self.assertIn("NOT NULL", str(caught.exception))
 
     def test_rank_code_must_be_in_the_controlled_vocabulary(self):
-        cell = self._cell(0)
-        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
-            self.cur.execute(
-                "INSERT INTO observation (page_id, cell_id, rank_code, as_of_date, author_user_id) "
-                "VALUES (%s,%s,'not_a_rank',DATE '1933-09-01',%s)",
-                (self.page_id, cell, self.user_id))
+        cell = self.cell()
+        with self.assertRaises(sqlite3.IntegrityError) as caught:
+            db.create_observation(page_id=self.page_id, cell_id=cell,
+                                  as_of_date="1933-09-01", user_id=self.user_id,
+                                  values={"rank_code": "not_a_rank"})
+        self.assertIn("FOREIGN KEY", str(caught.exception))
+
+    def test_a_known_rank_is_accepted(self):
+        cell = self.cell()
+        saved = db.create_observation(page_id=self.page_id, cell_id=cell,
+                                      as_of_date="1933-09-01", user_id=self.user_id,
+                                      values={"rank_code": "taisa"})
+        self.assertEqual(saved["status"], "draft")
+
+    def test_foreign_keys_are_actually_enforced(self):
+        """SQLite has them off by default; a connection that forgets is silent."""
+        with db.connect() as conn:
+            self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
 
 
 class DateNormalisationTests(unittest.TestCase):
-    """The write path must refuse an unclear date, never guess one.
-
-    No database needed: this is the rule the endpoint applies before writing.
-    """
+    """The write path must refuse an unclear date, never guess one."""
 
     def test_both_notations_reach_the_same_day(self):
         self.assertEqual(eradate.parse("明四三、一二、二六").value, date(1910, 12, 26))

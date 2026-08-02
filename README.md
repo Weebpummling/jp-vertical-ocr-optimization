@@ -144,9 +144,14 @@ benchmark definitions, and documentation.
 
 ## Technology
 
-PostgreSQL · Python + FastAPI · React + OpenSeadragon/Mirador · IIIF ·
+SQLite · Python + FastAPI · React + OpenSeadragon/Mirador · IIIF ·
 OpenCV (template registration) · NDLkotenOCR-Lite + a fine-tunable VLM ·
-Splink (record linkage) · Docker Compose.
+Splink (record linkage).
+
+The database is deliberately a single file. The deliverable of this project is
+the officer record itself, and it has to be copyable into a shared folder and
+openable by a researcher with DB Browser, pandas, R or Excel — none of which a
+database server allows. See decision 9 in [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Documents
 

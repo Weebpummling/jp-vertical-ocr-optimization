@@ -5,32 +5,23 @@ on:
   pull_request:
 
 jobs:
-  schema-and-vocab:
+  schema-and-tests:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: jpocr
-          POSTGRES_USER: jpocr
-          POSTGRES_PASSWORD: ci
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U jpocr -d jpocr"
-          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
-      - name: Apply schema to a fresh database
-        env:
-          PGPASSWORD: ci
-        run: psql -h localhost -U jpocr -d jpocr -v ON_ERROR_STOP=1 -f db/schema.sql
-      - name: Audit triggers hold their guarantees
-        env:
-          PGPASSWORD: ci
-        run: psql -h localhost -U jpocr -d jpocr -v ON_ERROR_STOP=1 -f db/audit_check.sql
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Schema applies to a fresh database
+        # No service container: the database is a SQLite file, so CI builds one
+        # the same way a laptop does.
+        run: python -c "import sys; sys.path.insert(0,'app'); import db; db.create('ci-check.db').close()"
+      - name: Controlled vocabularies load
+        # observation.rank_code and .branch_code are foreign keys into these, so
+        # an empty vocabulary means no officer can be recorded at all.
+        env:
+          JPOCR_DB: ci-check.db
+        run: python scripts/load_vocab.py
       - name: Lint controlled vocabularies
         run: python scripts/lint_vocab.py
       - name: Install reading-layer dependencies

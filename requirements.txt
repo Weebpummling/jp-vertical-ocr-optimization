@@ -10,5 +10,6 @@ numpy>=1.26
 fastapi>=0.115
 uvicorn>=0.30
 
-# Write side (app/db.py). The workstation reads and writes the audited core.
-psycopg[binary]>=3.2
+# The database itself needs nothing: it is a SQLite file, and sqlite3 ships with
+# Python. scripts/migrate_from_postgres.py is the one exception and is one-shot -
+# `pip install "psycopg[binary]"` if you ever need to re-run it.

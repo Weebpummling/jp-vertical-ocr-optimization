@@ -31,7 +31,7 @@ import api  # noqa: E402
 import db  # noqa: E402
 import issue_access_code as issuer  # noqa: E402
 
-from test_write_path import AVAILABLE  # noqa: E402
+from test_write_path import TempDatabase  # noqa: E402
 
 
 class MintTests(unittest.TestCase):
@@ -105,51 +105,39 @@ class CurrentUserTests(unittest.TestCase):
         self.assertNotIn("JP-SECR-ETCO-DE00", str(payload))
 
 
-@unittest.skipUnless(AVAILABLE, "no database (set JPOCR_DSN or POSTGRES_PASSWORD)")
-class ListingAttributionTests(unittest.TestCase):
+class ListingAttributionTests(TempDatabase):
     """Attribution is the whole point; leaking the code alongside it is not.
 
-    Runs the shipped query inside a transaction that is rolled back.
+    The seeded worker's login is an id code, exactly as in production.
     """
 
-    def setUp(self):
-        self.conn = db.connect()
-        self.conn.autocommit = False
-        self.addCleanup(self.conn.close)
-        self.addCleanup(self.conn.rollback)
-        self.cur = self.conn.cursor()
-        suffix = uuid.uuid4().hex[:8]
-        self.code = f"JP-TEST-{suffix[:4].upper()}-{suffix[4:].upper()}"
-        self.cur.execute(
-            "INSERT INTO app_user (login, display_name, role) "
-            "VALUES (%s, %s, 'annotator') RETURNING user_id",
-            (self.code, "Alice Tanaka"))
-        user_id = self.cur.fetchone()["user_id"]
-        self.cur.execute(
-            "INSERT INTO source_volume (title, pid, edition_date) "
-            "VALUES ('t', %s, DATE '1933-09-01') RETURNING volume_id", (f"test-{suffix}",))
-        vol = self.cur.fetchone()["volume_id"]
-        self.cur.execute(
-            "INSERT INTO source_page (volume_id, frame_no) VALUES (%s, 1) RETURNING page_id",
-            (vol,))
-        self.page_id = self.cur.fetchone()["page_id"]
-        self.cur.execute(
-            "INSERT INTO roster_cell (page_id, row_index, crop_bbox) "
-            "VALUES (%s, 0, %s) RETURNING cell_id", (self.page_id, [1, 2, 3, 4]))
-        cell = self.cur.fetchone()["cell_id"]
-        self.cur.execute(
-            "INSERT INTO observation (page_id, cell_id, name_raw, as_of_date, author_user_id) "
-            "VALUES (%s, %s, '平岩棟一', DATE '1933-09-01', %s)",
-            (self.page_id, cell, user_id))
+    def record(self):
+        cell = self.cell()
+        db.create_observation(page_id=self.page_id, cell_id=cell,
+                              as_of_date="1933-09-01", user_id=self.user_id,
+                              values={"name_raw": "平岩棟一"})
 
     def test_work_is_attributed_to_the_person(self):
-        rows = db.observations_for_page(str(self.page_id), cur=self.cur)
+        self.record()
+        rows = db.observations_for_page(self.page_id)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["author"], "Alice Tanaka")
 
     def test_the_listing_never_carries_the_id_code(self):
-        rows = db.observations_for_page(str(self.page_id), cur=self.cur)
-        self.assertNotIn(self.code, str(rows[0]))
+        self.record()
+        rows = db.observations_for_page(self.page_id)
+        self.assertNotIn("JP-TEST-CODE-0001", str(rows[0]))
+
+    def test_the_id_code_resolves_to_its_worker(self):
+        user = db.find_user("JP-TEST-CODE-0001")
+        self.assertEqual(user["display_name"], "Alice Tanaka")
+        self.assertIsNone(db.find_user("JP-NOPE-NOPE-NOPE"))
+
+    def test_issuing_a_code_creates_a_usable_worker(self):
+        code = issuer.issue("Bob Suzuki", issuer=None)
+        resolved = db.find_user(code)
+        self.assertEqual(resolved["display_name"], "Bob Suzuki")
+        self.assertTrue(code.startswith("JP-"))
 
 
 if __name__ == "__main__":

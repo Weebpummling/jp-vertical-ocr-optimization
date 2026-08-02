@@ -50,7 +50,7 @@ def _unique_code(cur) -> str:
     """Mint until the code is unused. `login` is UNIQUE; collision is a retry."""
     for _ in range(10):
         code = mint()
-        cur.execute("SELECT 1 FROM app_user WHERE login = %s", (code,))
+        cur.execute("SELECT 1 FROM app_user WHERE login = ?", (code,))
         if not cur.fetchone():
             return code
     raise RuntimeError("could not mint an unused code in 10 attempts")
@@ -68,29 +68,30 @@ def _resolve_issuer(issuer_code: str | None) -> str | None:
 def issue(display_name: str, issuer: str | None) -> str:
     with db.read_session() as cur:
         code = _unique_code(cur)
-    sql = ("INSERT INTO app_user (login, display_name, role) "
-           "VALUES (%s, %s, 'annotator')")
-    # role is NOT NULL with a CHECK, so every row needs one; it means nothing
-    # and nothing reads it. See the decision doc.
+    sql = "INSERT INTO app_user (user_id, login, display_name) VALUES (?, ?, ?)"
+    values = (db.new_id(), code, display_name)
     if issuer:
         with db.actor_session(issuer) as cur:
-            cur.execute(sql, (code, display_name))
+            cur.execute(sql, values)
+            db.log_work(cur, issuer, "issue_code", detail={"for": display_name})
     else:
-        with db.connect() as conn, conn.cursor() as cur:
-            cur.execute(sql, (code, display_name))
+        # Bootstrap: there is nobody to attribute the first worker to.
+        with db.session() as conn:
+            conn.execute(sql, values)
     return code
 
 
 def rotate(user_id: str, issuer: str | None) -> str:
     with db.read_session() as cur:
-        cur.execute("SELECT display_name FROM app_user WHERE user_id = %s", (user_id,))
+        cur.execute("SELECT display_name FROM app_user WHERE user_id = ?", (user_id,))
         row = cur.fetchone()
         if not row:
             raise SystemExit(f"no app_user with user_id {user_id}")
         code = _unique_code(cur)
     actor = issuer or user_id      # rotating your own code attributes to you
     with db.actor_session(actor) as cur:
-        cur.execute("UPDATE app_user SET login = %s WHERE user_id = %s", (code, user_id))
+        cur.execute("UPDATE app_user SET login = ? WHERE user_id = ?", (code, user_id))
+        db.log_work(cur, actor, "rotate_code", detail={"user_id": user_id})
     return code
 
 
