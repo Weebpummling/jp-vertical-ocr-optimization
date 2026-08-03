@@ -70,6 +70,11 @@ Tooling, in [`scripts/`](scripts/):
 - [`scripts/translation_docx.ps1`](scripts/translation_docx.ps1) — renders the
   merged, frame-referenced translation markdown to .docx via Word COM (for
   machines without pandoc), frame headings becoming a navigable index.
+- [`scripts/jacar_pull.ps1`](scripts/jacar_pull.ps1) — the handwritten
+  counterpart's first step: JACAR ref code in, source PDF + page PNGs out.
+  JACAR has no OCR of its own, so the reading itself follows
+  [`docs/jacar-handwritten-workflow.md`](docs/jacar-handwritten-workflow.md)
+  (NDLOCR-Lite + vision-LLM ensemble).
 
 The translation step between the two is a model or a human working through the
 chunk files; it is deliberately not a script.
