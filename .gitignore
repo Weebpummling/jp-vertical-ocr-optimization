@@ -24,6 +24,10 @@ groundtruth/
 # Page images, scans, crops, IIIF caches
 manuals/**
 !manuals/README.md
+# Sharing policy (1 Aug 2026): transcribed reference guides are text and may be
+# committed; the markdown-only pattern keeps scans out of the carve-out.
+!manuals/references/
+!manuals/references/*.md
 *.jpg
 *.jpeg
 *.png
