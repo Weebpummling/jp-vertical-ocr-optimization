@@ -132,19 +132,24 @@ benchmarks/   standing benchmark suite and accuracy reporting
 
 ## Data policy
 
-**No research data lives in this repository.** This is deliberate, not incidental:
+Two things never leave the local data home, deliberately:
 
-- **Ground truth is walled off.** The human-verified partial dataset is the project's
+- **Ground truth is walled off.** The human-verified roster dataset is the project's
   accuracy yardstick and its VLM fine-tuning set. It only stays an honest hold-out if it
   is never mixed with production data and never published.
-- **Source scans are not ours to redistribute.** NDL, JACAR, and personal-copy materials
-  stay with their holding institutions; the repo stores stable references (PIDs, IIIF
-  manifest URLs, JACAR refs), not images.
-- **Officer datasets stay local.** Transcription output and the linked academy dataset are
+- **The final products stay local.** The officer panel and the linked academy dataset are
   research assets released, if at all, on the project's own terms — not by side effect of
   a commit.
 
-What *is* versioned: schema, controlled vocabularies, layout templates, extraction code,
+**Source scans are not ours to redistribute.** NDL, JACAR, NARA, and personal-copy
+materials stay with their holding institutions; the repo stores stable references
+(PIDs, IIIF manifest URLs, JACAR ref codes, NARA NAIDs), not images.
+
+**Transcriptions and translations of public-domain sources may be committed** (lead
+decision, 1 Aug 2026) — manuals, combat accounts, reference legends — each linked to
+its institutional identifier with the holder's attribution, in place of the scans.
+
+Also versioned: schema, controlled vocabularies, layout templates, extraction code,
 benchmark definitions, and documentation.
 
 ## Technology
