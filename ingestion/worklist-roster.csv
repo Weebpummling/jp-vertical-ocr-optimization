@@ -20,5 +20,11 @@ active,昭和10年9月1日調,1935,1445522,1449474,internet_public,yes,1449474 i
 active,昭和11年9月1日調,1936,1454447,,internet_public,yes,924 pp 偕行社; fulltext-json verified
 reserve_yobi,大正12年4月1日調,1923,942278,,internet_public,partial,予備役
 reserve_yobi,大正13年4月1日調,1924,942279,,internet_public,partial,予備役
+reserve_yobi,大正15年4月1日調,1926,1908490,,internet_public,yes,予備役; SRU verified 1 Aug 2026; SOURCE of MA/Tokyo Report 2727 counts (manuals/references/nara-2023-739-report-2727-reserve-officers.md) - bidirectional cross-check pair
+reserve_yobi,昭和2年4月1日調,1927,1445528,,internet_public,yes,予備役; SRU verified 1 Aug 2026
+reserve_yobi,昭和3年4月1日調,1928,1454437,,internet_public,yes,予備役; SRU verified 1 Aug 2026
+reserve_yobi,昭和4年4月1日調,1929,1449978,,internet_public,yes,予備役; SRU verified 1 Aug 2026
+reserve_yobi,昭和6年4月1日調,1931,1444345,,internet_public,yes,予備役; SRU verified 1 Aug 2026
+reserve_yobi,昭和9年4月1日調,1934,1454448,,internet_public,yes,予備役; SRU verified 1 Aug 2026
 reserve_kobi,大正12年4月1日調,1923,942280,,internet_public,partial,後備役
 reserve_kobi,大正13年4月1日調,1924,942281,,internet_public,partial,後備役

@@ -30,6 +30,22 @@ exactly the axes of the officer-year panel. Uses:
   Officers' Directory) of 1 April 1926 — a source family adjacent to our
   rosters; NDL worklist candidate.
 
+## 1:1 Japanese source — located (1 Aug 2026)
+
+The directory this report was compiled from is digitized: **陸軍予備役将校同相当官
+服役停年名簿 大正15年4月1日調** (陸軍省編, 偕行社), NDL pid
+[1908490](https://dl.ndl.go.jp/pid/1908490) — same 停年名簿 family as the active
+rosters, reserve branch of the series. Seven further editions are on NDL
+(1923–1934; see `ingestion/worklist-roster.csv`, series `reserve_yobi`); SRU
+found no 昭和5/7/8 or 昭和10+ editions, but sweep the `lab.ndl.go.jp/dl` API
+before treating those as real gaps (catalog records vary — the Spike B lesson).
+
+Two cross-check routes follow: **recount pid 1908490 directly** (a true 1:1
+check of these tables, machine-countable from NDL's fulltext if the volume is in
+the Next-Gen DL), or compare against the 陸軍省統計年報 aggregates (independent
+official compilation). Branch-label mapping: "Int. Officers" = 経理部,
+"Apothecaries" = 薬剤官 (軍医部), per `data/vocab/branch.csv`.
+
 Extraction integrity notes: all row/column sums verified against stated totals;
 three typewriter-deleted digits in the Second Reserve table are recorded as
 deletions (the totals confirm they do not count); one typed figure in the age
