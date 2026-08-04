@@ -46,6 +46,11 @@ the Next-Gen DL), or compare against the 陸軍省統計年報 aggregates (indep
 official compilation). Branch-label mapping: "Int. Officers" = 経理部,
 "Apothecaries" = 薬剤官 (軍医部), per `data/vocab/branch.csv`.
 
+**Aggregate check executed (1 Aug 2026):** a layout-only column count of pid
+1908490 gives **22,768** entry columns vs this report's **22,745** — agreement
+to 0.10 %. Method, caveats, and the rank×branch work still open:
+[`benchmarks/reserve-1926-crosscheck.md`](../../benchmarks/reserve-1926-crosscheck.md).
+
 Extraction integrity notes: all row/column sums verified against stated totals;
 three typewriter-deleted digits in the Second Reserve table are recorded as
 deletions (the totals confirm they do not count); one typed figure in the age
