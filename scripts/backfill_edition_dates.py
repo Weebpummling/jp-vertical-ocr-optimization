@@ -62,7 +62,17 @@ def main(argv: list[str]) -> int:
     if args.apply:
         user = db.find_user(args.user)
         if not user:
+            # On a fresh database nobody exists yet, and the default login is a
+            # placeholder rather than a real account - so this is the first thing
+            # a new install hits. Say what to do rather than only what is wrong.
             print(f"no such app_user: {args.user!r}", file=sys.stderr)
+            print(
+                "\nWrites are attributed, so this needs an existing worker. Issue a\n"
+                "code first, then pass it as --user:\n\n"
+                '    python scripts/issue_access_code.py "Your Name"\n'
+                "    python scripts/backfill_edition_dates.py --apply --user JP-XXXX-XXXX-XXXX\n",
+                file=sys.stderr,
+            )
             return 2
         actor = str(user["user_id"])
 

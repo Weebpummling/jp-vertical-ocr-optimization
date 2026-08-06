@@ -157,6 +157,33 @@ export default function App() {
       [officerIndex]: { ...(prev[officerIndex] ?? {}), [key]: value },
     }));
 
+  // 兵科 and 階級 come from the section header, not the officer's own cell, so
+  // they are the same for every officer under that heading — a 24-officer page
+  // otherwise costs ~48 keystrokes' worth of values that never change. Carry the
+  // nearest earlier reading forward as a starting point. It is a suggestion, not
+  // a value: typing over it is an ordinary edit, an officer already recorded is
+  // left exactly as recorded, and nothing is carried into what gets saved unless
+  // it is on screen when the reader commits.
+  const valuesFor = useCallback(
+    (index: number): Values => {
+      const typed = entries[index] ?? {};
+      // An officer already recorded shows exactly what was recorded.
+      if (saves[index]?.state === "saved") return typed;
+      const carried: Values = {};
+      for (let i = index - 1; i >= 0; i--) {
+        const prev = entries[i];
+        if (!prev) continue;
+        if (!carried.branch && prev.branch) carried.branch = prev.branch;
+        if (!carried.rank && prev.rank) carried.rank = prev.rank;
+        if (carried.branch && carried.rank) break;
+      }
+      return { ...carried, ...typed };
+    },
+    [entries, saves],
+  );
+
+  const values = valuesFor(officerIndex);
+
   const signOut = useCallback((notice?: string) => {
     forgetIdCode();
     setWorker(null);
@@ -167,10 +194,19 @@ export default function App() {
   const commit = useCallback(
     async (index: number) => {
       if (!page) return;
-      const values = entries[index];
-      if (!values || isBlank(values)) return; // nothing typed: nothing to record
+      // Blankness is judged on what the reader actually typed, never on what was
+      // carried forward for them: otherwise stepping through officers nobody has
+      // read yet would record each one on the strength of an inherited 兵科
+      // alone. A suggestion is not a reading.
+      if (isBlank(entries[index] ?? {})) return;
+      // Recorded values are what was on screen, so a carried 兵科/階級 the reader
+      // left standing rides along with the officer they did read.
+      const values = valuesFor(index);
       const snapshot = JSON.stringify(values);
       if (savedSnapshot.current[index] === snapshot) return; // already recorded, unchanged
+      // Materialize it, so stepping back to this officer shows what was saved
+      // rather than re-deriving a suggestion.
+      setEntries((prev) => ({ ...prev, [index]: values }));
 
       setSaves((s) => ({ ...s, [index]: { state: "saving" } }));
       const pageKey = `${page.pid}:${page.frame}:${page.panel}`;
@@ -212,7 +248,7 @@ export default function App() {
         }));
       }
     },
-    [page, entries, vocab, signOut],
+    [page, entries, valuesFor, vocab, signOut],
   );
 
   // The viewer follows the cursor: the current cell if the field has one,
@@ -283,7 +319,7 @@ export default function App() {
             officerCount={page.officers.length}
             cells={officer.cells}
             vocab={vocab}
-            values={entries[officerIndex] ?? {}}
+            values={values}
             onChange={setValue}
             activeField={activeField}
             onFocusField={setActiveField}

@@ -79,8 +79,8 @@ Seven fields, in reading order:
 |---|---|
 | **序列番号** seniority no. | The printed sequence number. It should climb steadily as you move left across the page — a break is worth a note. |
 | **氏名** name | The name cell also carries the birth date; type the name. |
-| **兵科** branch | **From the section header, not this officer's cell** — it is the same for every officer under that heading. |
-| **階級** rank | Also from the section header. |
+| **兵科** branch | **From the section header, not this officer's cell** — the same for every officer under that heading, so it is carried forward for you (see below). |
+| **階級** rank | Also from the section header, and also carried forward. |
 | **職名** post | The appointment. |
 | **任官年月日** commissioning date | Type it **exactly as printed** — `明四三、一二、二六` is fine, and so is `明治43年12月26日`. The server converts it. Do not tidy it up. |
 | **備考** remarks | Anything worth saying about this reading. |
@@ -95,6 +95,18 @@ Seven fields, in reading order:
 | <kbd>Alt</kbd>+<kbd>↑</kbd> *(or <kbd>←</kbd>)* | Record and go back to the previous officer. |
 | <kbd>Alt</kbd>+<kbd>G</kbd> | Mark a character you cannot read (see §6). |
 | <kbd>Esc</kbd> | Close the suggestion list. |
+
+### 兵科 and 階級 carry forward
+
+Both come from the section header, so once you have entered them for one officer
+they appear already filled for the next. **Check them against the page anyway** —
+they are a suggestion, not a reading, and they keep appearing until you change
+them. When the section heading changes, type the new value once and it carries
+from there.
+
+Stepping past an officer you have not read records nothing: a carried 兵科 on its
+own is not a reading, and nothing is recorded for an officer until you type
+something of your own.
 
 **Leaving an officer records them.** You cannot lose an officer by stepping away
 from them. A blank officer is not recorded, and re-recording an unchanged one
@@ -167,10 +179,11 @@ Known and being fixed. Until then:
 
 - **Note the frame number you stop at.** The workstation always reopens at frame
   100. Without your own note there is no way to tell where you left off.
-- **兵科 and 階級 must be retyped for every officer**, even though every officer
-  under one heading shares them. Copy-paste is fine.
 - **Nothing tells you which pages of the volume are done.** Keep a list, or
   agree page ranges with whoever else is transcribing.
+- **An officer someone else already recorded shows an empty form.** The counter
+  says how many are done, but not what was read — so check with them rather than
+  re-reading a row that is already finished.
 - **Finishing the last officer on a page does nothing visible.** When the officer
   counter stops advancing, the page is done — change the frame in the top bar.
 
@@ -189,9 +202,13 @@ Point `JP_OCR_DATA` at the data home, then, once ever:
 python -c "import sys; sys.path.insert(0,'app'); import db; db.create(db.db_path()).close()"
 python scripts/load_vocab.py                       # 11 ranks, 14 branches, 28 variants
 python ingestion/iiif_client.py register 1449426   # register the volume
-python scripts/backfill_edition_dates.py --apply   # observations need as_of_date
 python scripts/issue_access_code.py "Their Name"   # one code per person
+python scripts/backfill_edition_dates.py --apply --user JP-XXXX-XXXX-XXXX
 ```
+
+**Issue the first code before the backfill, and pass it.** Every write is
+attributed, so the backfill needs an existing worker; on a fresh database it has
+nobody to attribute to and stops with `no such app_user: 'system'`.
 
 The pages an annotator will read must be **cached first** — the workstation
 serves pixels from the local cache and never from NDL, so an uncached page

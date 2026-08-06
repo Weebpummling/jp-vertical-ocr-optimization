@@ -156,13 +156,19 @@ Setup, once:
 python -c "import sys; sys.path.insert(0,'app'); import db; db.create(db.db_path()).close()"
 python scripts/load_vocab.py                       # rank/branch FKs; nothing saves without them
 python ingestion/iiif_client.py register <pid>     # register a volume
-python scripts/backfill_edition_dates.py --apply   # observations need as_of_date
 python scripts/issue_access_code.py "Your Name"    # your own code
+python scripts/backfill_edition_dates.py --apply --user JP-XXXX-XXXX-XXXX
 ```
 
 The very first code is a bootstrap — there is nobody to attribute the insert to,
 so `audit_log` records a NULL actor by design. Pass `--issuer <your code>` for
 every one after that.
+
+**Issue that code before the backfill, not after.** The backfill attributes its
+writes like every other path, and its `--user` default (`system`) is a
+placeholder rather than a real account — so on a fresh database the documented
+order used to stop dead at `no such app_user: 'system'`. The script now says
+what to do about it; the order above is the fix.
 
 ## Recording an officer
 
@@ -224,11 +230,12 @@ None of these break anything; all of them cost the annotator time or attention,
 which is the quantity Phase 1's exit criterion measures. Roughly in order of
 what they cost, with the workaround the guide currently tells readers to use:
 
-1. **兵科 and 階級 are retyped for every officer.** Both come from the section
-   header and are constant for a long run of officers, so a 24-officer page
-   means ~48 keyed values that never change. Carrying them forward until the
-   header changes — with the value shown as inherited, not confirmed — is the
-   single biggest typing saving available.
+1. ~~**兵科 and 階級 are retyped for every officer.**~~ **Fixed 3 Aug 2026.** Both
+   carry forward from the nearest earlier officer, as a suggestion the reader can
+   type over. Blankness is judged on what the reader typed rather than on what
+   was carried, so stepping through unread officers still records nothing — the
+   first cut of this got that wrong and wrote an observation carrying only an
+   inherited branch, which is what a live test caught.
 2. **No way to move to the next page from the keyboard, and no memory of where
    you were.** `DEFAULT_FRAME` is hard-coded, so every reload reopens frame 100
    of pid 1449426. Finishing a page means reaching for the mouse, and resuming
