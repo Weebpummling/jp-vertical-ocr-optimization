@@ -1,5 +1,9 @@
 # Layer 3 — Transcription workstation
 
+> **Doing the transcribing rather than building it? Read
+> [`OPERATING.md`](OPERATING.md).** This file is the developer's view; that one
+> is the reader's, and includes the once-only setup.
+
 The human-primary core. Three panes: zoomable page (cell auto-centered) · structured entry
 form (氏名, 兵科, 階級, 職名, 任官年月日, seniority, notes) · candidate/verification panel
 (OCR + VLM + propagation + prior-year values).
@@ -213,6 +217,38 @@ and the geta mark cannot get past — it can be added the first time one does.
 
 The seal/damage flag → alt-scan flip, and furigana capture. The candidate pane
 is a styled placeholder until Layer 4 produces proposals.
+
+### Throughput gaps found writing the operator guide (3 Aug 2026)
+
+None of these break anything; all of them cost the annotator time or attention,
+which is the quantity Phase 1's exit criterion measures. Roughly in order of
+what they cost, with the workaround the guide currently tells readers to use:
+
+1. **兵科 and 階級 are retyped for every officer.** Both come from the section
+   header and are constant for a long run of officers, so a 24-officer page
+   means ~48 keyed values that never change. Carrying them forward until the
+   header changes — with the value shown as inherited, not confirmed — is the
+   single biggest typing saving available.
+2. **No way to move to the next page from the keyboard, and no memory of where
+   you were.** `DEFAULT_FRAME` is hard-coded, so every reload reopens frame 100
+   of pid 1449426. Finishing a page means reaching for the mouse, and resuming
+   tomorrow depends on the annotator having written the frame number down. On an
+   874-frame volume this is the most repeated non-transcription action there is.
+3. **No volume-level progress.** The status line counts the current page only,
+   so "which pages are done?" cannot be answered from the UI — the coverage
+   question the project names as its first risk is exactly the one an operator
+   cannot see. The observations endpoint already knows; a per-volume roll-up
+   would surface it.
+4. **Finishing the last officer on a page is silent.** `moveOfficer` clamps, so
+   rolling off the last field of the last officer records them and then appears
+   to do nothing. An explicit "page complete" state would close the loop —
+   ideally the same affordance that advances the frame in (2).
+
+Deliberately *not* patched from the office machine: it has no node/npm, so a UI
+change could not be built or run there, and shipping untested edits to the one
+tool an annotator depends on is the wrong trade. See
+[`OPERATING.md`](OPERATING.md) §8, which documents each of these as a rough edge
+with a workaround.
 
 Roles are **not** outstanding work — `app_user.role` gates nothing by decision,
 and reviewer ≠ author is arranged between people rather than enforced by the
