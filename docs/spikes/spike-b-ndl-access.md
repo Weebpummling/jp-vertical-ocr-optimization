@@ -31,8 +31,57 @@ API surfaced them — catalog records vary, so worklists should be built from *b
 
 Also present and internet-public: **reserve/後備役 lists** (予備役 942278–942279,
 後備役 942280–942281 for 大正12/13; Meiji-era 843985–843986, 1939211) — needed by
-Layer 5's disappearance handling. Worklist task: enumerate reserve-list editions for
-the Shōwa window the same way.
+Layer 5's disappearance handling. ~~Worklist task: enumerate reserve-list editions for
+the Shōwa window the same way.~~ **Done — see the addendum below.**
+
+## Addendum — reserve-list enumeration for the Shōwa window (1–3 Aug 2026)
+
+Both reserve series were enumerated by exact-title SRU query
+(`陸軍予備役将校同相当官服役停年名簿` / `陸軍後備役…`), each PID then confirmed
+internet-public by fetching its IIIF manifest. Twelve editions added to
+`ingestion/worklist-roster.csv`; the two series run in parallel, same 4月1日調
+date, same publisher (偕行社).
+
+| 調 year | 予備役 pid | 後備役 pid |
+|---|---|---|
+| 大正12 (1923) | 942278 | 942280 |
+| 大正13 (1924) | 942279 | 942281 |
+| 大正15 (1926) | 1908490 | 1908476 |
+| 昭和2 (1927) | 1445528 | 1454449 |
+| 昭和3 (1928) | 1454437 | 1454445 |
+| 昭和4 (1929) | 1449978 | 1454450 |
+| 昭和6 (1931) | 1444345 | 1452970 |
+| 昭和9 (1934) | 1454448 | 1454463 |
+
+**The apparent gaps are partly explained, not silent.** No full edition surfaces for
+昭和5, 7, 8 or 10. For two of those years a **追録 (supplement)** exists instead,
+and the supplements merge both series into one volume
+(`予備役・後備役将校同相当官服役停年名簿追録`):
+
+- **昭和7年 (1932)** — pid 1449401, 266 canvases, internet-public.
+- **昭和10年 (1935)** — pid 1906893, **not** internet-public (IIIF 404;
+  library-transmission only). Needs a 送信サービス/onsite route if that year matters.
+
+**Both APIs were swept, per this spike's own lesson.** A second pass over
+`lab.ndl.go.jp/dl/api/book/search?keyword=服役停年名簿` (123 records, both series,
+active and reserve) returns exactly the reserve set above plus the Meiji anchors —
+no edition that the SRU title query missed. The two independent catalogues agreeing
+is what makes the remaining gaps a finding rather than a search failure:
+
+- **昭和7 (1932)** — covered by the public 追録.
+- **昭和5 (1930), 昭和8 (1933)** — no reserve edition of any kind in either API.
+- **昭和10 (1935)** — 追録 exists but is not internet-public; note it does not appear
+  in the lab API sweep at all, which is consistent with that index covering only
+  public items. Absence there is therefore not evidence of absence generally.
+
+No 大正14 (1925) reserve edition surfaced either. Whether these are non-publication
+years or non-digitized volumes is a question for NDL's printed catalogue, not the
+APIs.
+
+Consequence for Layer 5: an officer's disappearance from the active list can be
+checked against a reserve list in the same or the following year for every year of
+the window **except 昭和5 and 昭和8**, where the check degrades to the neighbouring
+edition plus Kanpō.
 
 ## Access patterns (verified live)
 

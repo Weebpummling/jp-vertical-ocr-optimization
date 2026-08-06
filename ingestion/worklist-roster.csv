@@ -28,3 +28,11 @@ reserve_yobi,昭和6年4月1日調,1931,1444345,,internet_public,yes,予備役; 
 reserve_yobi,昭和9年4月1日調,1934,1454448,,internet_public,yes,予備役; SRU verified 1 Aug 2026
 reserve_kobi,大正12年4月1日調,1923,942280,,internet_public,partial,後備役
 reserve_kobi,大正13年4月1日調,1924,942281,,internet_public,partial,後備役
+reserve_kobi,大正15年4月1日調,1926,1908476,,internet_public,yes,後備役; SRU+IIIF verified 3 Aug 2026; 662 canvases
+reserve_kobi,昭和2年4月1日調,1927,1454449,,internet_public,yes,後備役; SRU+IIIF verified 3 Aug 2026; 751 canvases
+reserve_kobi,昭和3年4月1日調,1928,1454445,,internet_public,yes,後備役; SRU+IIIF verified 3 Aug 2026; 466 canvases
+reserve_kobi,昭和4年4月1日調,1929,1454450,,internet_public,yes,後備役; SRU+IIIF verified 3 Aug 2026; 530 canvases
+reserve_kobi,昭和6年4月1日調,1931,1452970,,internet_public,yes,後備役; SRU+IIIF verified 3 Aug 2026; 1192 canvases
+reserve_kobi,昭和9年4月1日調,1934,1454463,,internet_public,yes,後備役; SRU+IIIF verified 3 Aug 2026; 854 canvases
+reserve_supplement,昭和7年,1932,1449401,,internet_public,yes,予備役・後備役 combined 追録 (supplement); 266 canvases; covers the missing 昭和7 full edition
+reserve_supplement,昭和10年,1935,1906893,,not_internet_public,no,予備役・後備役 combined 追録; IIIF 404 (library-transmission only) - needs an alternative route or an onsite/送信 request

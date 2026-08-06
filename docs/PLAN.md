@@ -111,8 +111,13 @@ train/hold-out split fixed; all four spikes have written answers.
 - [x] CI on every push: the schema builds a fresh database, vocabularies load, and both
       test suites run — with no service container, so CI does exactly what a laptop does
       (`.github/workflows/ci.yml`, `scripts/lint_vocab.py`).
-- [~] Worklist registry: roster PIDs 1914–1936 seeded (`ingestion/worklist-roster.csv`);
-      Shōwa-era reserve-list editions and 号外 enumeration still to add.
+- [~] Worklist registry: roster PIDs 1914–1936 seeded (`ingestion/worklist-roster.csv`).
+      **Reserve lists done (3 Aug 2026)** — both series enumerated and access-checked
+      across the window (予備役 and 後備役, 8 editions each, plus the 昭和7 追録);
+      swept through *both* catalogues with `scripts/ndl_worklist_sweep.ps1`, so the
+      residual gaps (昭和5, 昭和8, and a non-public 昭和10 追録) are findings, not
+      search misses — see the addendum in `docs/spikes/spike-b-ndl-access.md`.
+      **号外 enumeration still to add** (Phase 4 dependency).
 - [x] IIIF client (`ingestion/iiif_client.py`): manifest fetch (cached), volume +
       page registration (audited, idempotent), polite cached full-page retrieval,
       and per-cell region crops as re-checkable IIIF URLs — verified on real
