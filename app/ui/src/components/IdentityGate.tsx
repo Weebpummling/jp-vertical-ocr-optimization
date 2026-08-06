@@ -70,9 +70,11 @@ export function IdentityGate({ onIdentified, notice }: Props) {
           {checking ? "checking…" : "start"}
         </button>
         {error && <p className="gate__error">{error}</p>}
+        {/* The reader cannot run the script that mints these, so naming it here
+            was addressed to the wrong person. Whoever set the workstation up has
+            the instructions. */}
         <p className="gate__foot">
-          Don’t have one? Ask the project lead to issue you a code —{" "}
-          <code>scripts/issue_access_code.py</code>.
+          Don’t have one? Ask whoever set this up to issue you one.
         </p>
       </form>
     </div>

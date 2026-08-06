@@ -263,6 +263,22 @@ what they cost, with the workaround the guide currently tells readers to use:
    already showing the new number, which reads as "this page is done". It now
    says `loading frame N…`. Found by being misled by it while testing (3).
 
+### From a second walkthrough (3 Aug 2026)
+
+Found by using the workstation as a reader would, start to finish, rather than
+by reading the code:
+
+7. **Changing pages discarded the officer in hand.** `load` clears the typed
+   values, so typing an officer and pressing Alt+PgDn threw the work away
+   silently — the same loss that "leaving an officer records them" exists to
+   prevent, by a route nobody had walked. Page changes now record first, and a
+   tab closed with unrecorded typing raises the browser's own warning.
+8. **Refusals named storage keys.** A reader told `commissioning_date` was
+   refused had to translate that back to 任官年月日 to find the box; the list now
+   uses the labels on the form.
+9. **The sign-in card told readers to run a script.** They cannot, and it is not
+   addressed to them — it now points at whoever set the workstation up.
+
 Each fix was built and driven in a browser against a real page of pid 1449426
 before landing, and `OPERATING.md` moves with the software rather than after it.
 

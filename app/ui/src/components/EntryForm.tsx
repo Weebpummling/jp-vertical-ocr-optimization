@@ -355,7 +355,11 @@ export function EntryForm({
             <ul>
               {Object.entries(saveState.flagged).map(([field, why]) => (
                 <li key={field}>
-                  <code>{field}</code> {why.raw && <b>{why.raw}</b>} — {why.refused}
+                  {/* The label the reader typed into, not the storage key: being
+                      told "commissioning_date" was refused means translating it
+                      back to 任官年月日 before you can look at the right box. */}
+                  <strong>{FIELDS.find((f) => f.key === field)?.label ?? field}</strong>{" "}
+                  {why.raw && <b>{why.raw}</b>} — {why.refused}
                 </li>
               ))}
             </ul>

@@ -92,6 +92,10 @@ export default function App() {
   // `roster_cell` rows are a per-page precondition for saving, and the endpoint
   // is idempotent, so it runs once per page rather than once per officer.
   const cellsEnsured = useRef<Set<string>>(new Set());
+  // Lets page navigation record the officer in hand without `goFrame` having to
+  // depend on `commit`, which would recreate the window key handler on every
+  // keystroke.
+  const commitRef = useRef<(() => Promise<void>) | null>(null);
 
   // A stored code is checked before the workstation opens: a code that has been
   // rotated should fail here, not after an hour of transcription.
@@ -251,12 +255,37 @@ export default function App() {
 
   const values = valuesFor(officerIndex);
 
+  // Typing that has not been recorded yet. Moving between officers records them,
+  // but closing the tab is the same loss by a different route — and this state
+  // lives only in memory.
+  const unsaved = useMemo(
+    () =>
+      Object.keys(entries).filter(
+        (k) =>
+          !isBlank(entries[Number(k)] ?? {}) &&
+          savedSnapshot.current[Number(k)] !== JSON.stringify(entries[Number(k)]) &&
+          saves[Number(k)]?.state !== "saved",
+      ).length,
+    [entries, saves],
+  );
+
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsaved]);
+
   // Page-to-page movement, from the keyboard. A volume is hundreds of frames, so
   // the page boundary was the one place the reader had to stop and use the mouse.
   const goFrame = useCallback(
-    (delta: number) => {
+    async (delta: number) => {
       const next = frame + delta;
       if (next < 1 || loading) return;
+      // Leaving a page records the officer in hand, exactly as leaving an
+      // officer does: `load` clears the typed values, so anything not committed
+      // first would be discarded without a word.
+      await commitRef.current?.();
       setFrame(next);
       load(pid, next);
     },
@@ -345,6 +374,9 @@ export default function App() {
     },
     [page, entries, valuesFor, vocab, signOut],
   );
+
+  // Kept current so page navigation can flush the officer in hand.
+  commitRef.current = () => commit(officerIndex);
 
   // The viewer follows the cursor: the current cell if the field has one,
   // otherwise the whole officer strip (branch and rank live in the section

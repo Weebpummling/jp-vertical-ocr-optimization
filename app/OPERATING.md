@@ -138,6 +138,10 @@ Nothing you do overwrites it — readings are only ever added, so editing one
 records a *new* reading alongside theirs rather than replacing it. Normally you
 should move on; correct it only if it is actually wrong, and say why in 備考.
 
+**Changing pages records the officer you are on**, so you can move on mid-entry
+without losing them. If you close the tab with something typed and unrecorded,
+the browser will ask before letting the page go.
+
 **Leaving an officer records them.** You cannot lose an officer by stepping away
 from them. A blank officer is not recorded, and re-recording an unchanged one
 does nothing — so stepping back through finished work is safe.
