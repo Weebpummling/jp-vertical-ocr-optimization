@@ -138,6 +138,18 @@ kbd {
 .tag--provisional { color: var(--provisional); }
 .tag--suspect { color: var(--suspect); border-style: solid; }
 .tag--nocell { color: var(--muted); }
+.tag--done { color: var(--accent); border-style: solid; }
+
+/* Notices above the fields: whose reading is on screen, and that the page has
+   run out of officers. Context rather than alarms, so they stay quiet. */
+.already {
+  margin: 0.35rem 0 0;
+  padding: 0.3rem 0.5rem;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.already strong { color: var(--ink); }
 
 .options {
   list-style: none;

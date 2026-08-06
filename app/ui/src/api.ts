@@ -175,6 +175,12 @@ export interface PageObservation {
   row_index: number;
   name_raw: string | null;
   seniority_no: number | null;
+  /** Vocabulary codes, not the printed forms — resolve through `Vocab` to display. */
+  rank_code: string | null;
+  branch_code: string | null;
+  post: string | null;
+  /** Already normalized by the server (1923-08-01), not as printed. */
+  commissioning_date: string | null;
   status: string;
   created_at: string;
   /** Display name of whoever read it. */

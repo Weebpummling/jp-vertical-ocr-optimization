@@ -236,26 +236,26 @@ what they cost, with the workaround the guide currently tells readers to use:
    was carried, so stepping through unread officers still records nothing — the
    first cut of this got that wrong and wrote an observation carrying only an
    inherited branch, which is what a live test caught.
-2. **No way to move to the next page from the keyboard, and no memory of where
-   you were.** `DEFAULT_FRAME` is hard-coded, so every reload reopens frame 100
-   of pid 1449426. Finishing a page means reaching for the mouse, and resuming
-   tomorrow depends on the annotator having written the frame number down. On an
-   874-frame volume this is the most repeated non-transcription action there is.
-3. **No volume-level progress.** The status line counts the current page only,
-   so "which pages are done?" cannot be answered from the UI — the coverage
-   question the project names as its first risk is exactly the one an operator
-   cannot see. The observations endpoint already knows; a per-volume roll-up
-   would surface it.
-4. **Finishing the last officer on a page is silent.** `moveOfficer` clamps, so
-   rolling off the last field of the last officer records them and then appears
-   to do nothing. An explicit "page complete" state would close the loop —
-   ideally the same affordance that advances the frame in (2).
+2. ~~**No keyboard page advance, and no memory of where you were.**~~ **Fixed
+   3 Aug 2026.** <kbd>Alt</kbd>+<kbd>PgDn</kbd>/<kbd>PgUp</kbd> (and prev/next
+   buttons) move between frames, and the last page that loaded is remembered per
+   browser, so a session reopens where it stopped instead of at a hard-coded
+   frame 100.
+3. **No volume-level progress.** *Still open — the next thing to do.* The status
+   line counts the current page only, so "which pages are done?" cannot be
+   answered from the UI — the coverage question the project names as its first
+   risk is exactly the one an operator cannot see. It needs a per-volume roll-up
+   endpoint; the per-page observations query already has the shape.
+4. ~~**Finishing the last officer on a page is silent.**~~ **Fixed 3 Aug 2026.**
+   The last officer says so and points at the page-advance key, and the status
+   line marks a page whose officers are all recorded as complete.
+5. ~~**An officer already recorded showed an empty form**~~ — found while testing
+   pass 1, **fixed 3 Aug 2026.** The listing endpoint already returned every
+   field; the UI kept only "saved" and the author. It now shows the reading with
+   a line naming who recorded it, codes resolved back through the vocabulary.
 
-Deliberately *not* patched from the office machine: it has no node/npm, so a UI
-change could not be built or run there, and shipping untested edits to the one
-tool an annotator depends on is the wrong trade. See
-[`OPERATING.md`](OPERATING.md) §8, which documents each of these as a rough edge
-with a workaround.
+Each fix was built and driven in a browser against a real page of pid 1449426
+before landing, and `OPERATING.md` moves with the software rather than after it.
 
 Roles are **not** outstanding work — `app_user.role` gates nothing by decision,
 and reviewer ≠ author is arranged between people rather than enforced by the

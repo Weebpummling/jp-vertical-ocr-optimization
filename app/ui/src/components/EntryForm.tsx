@@ -66,6 +66,10 @@ interface Props {
   /** Record this officer as a draft. Safe to call twice: unchanged is a no-op. */
   onCommit: () => void;
   saveState?: SaveState;
+  /** True on the last officer of the page, so the reader is told the page is done. */
+  isLastOfficer?: boolean;
+  /** Set when what is on screen is a reading already on record, not this session's typing. */
+  recordedBy?: string;
 }
 
 export function EntryForm({
@@ -80,6 +84,8 @@ export function EntryForm({
   onOfficer,
   onCommit,
   saveState,
+  isLastOfficer,
+  recordedBy,
 }: Props) {
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const composing = useRef(false);
@@ -198,8 +204,21 @@ export function EntryForm({
         </h2>
         <p className="keys">
           <kbd>Enter</kbd> next field · <kbd>Alt</kbd>+<kbd>↓</kbd>/<kbd>↑</kbd> next/prev
-          officer · <kbd>Alt</kbd>+<kbd>G</kbd> can’t read a character
+          officer · <kbd>Alt</kbd>+<kbd>PgDn</kbd>/<kbd>PgUp</kbd> next/prev page ·{" "}
+          <kbd>Alt</kbd>+<kbd>G</kbd> can’t read a character
         </p>
+        {recordedBy && (
+          <p className="already">
+            Already recorded by <strong>{recordedBy}</strong> — this is their
+            reading. Editing it records a new one rather than replacing theirs.
+          </p>
+        )}
+        {isLastOfficer && (
+          <p className="already">
+            Last officer on this page. <kbd>Alt</kbd>+<kbd>PgDn</kbd> for the next
+            page.
+          </p>
+        )}
       </header>
 
       <div className="fields">

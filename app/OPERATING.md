@@ -41,9 +41,12 @@ The top bar has **pid** and **frame**, then **load**.
   seniority list, the volume the layout template was built from.
 - **frame** is the scan number, the same number the NDL viewer shows.
 
-The workstation opens on pid `1449426`, frame `100` every time. **Write down the
-frame you finish on** — see [§8](#8-rough-edges-and-how-to-work-around-them),
-because the software will not remember it for you yet.
+**It reopens wherever you left off.** The browser remembers the last page that
+loaded, so you can close it mid-volume and come back to the same frame. A machine
+that has never been used starts at pid `1449426`, frame `100`.
+
+Move between pages with <kbd>Alt</kbd>+<kbd>PgDn</kbd> and
+<kbd>Alt</kbd>+<kbd>PgUp</kbd>, or the **‹ prev** / **next ›** buttons.
 
 Once a page loads, the status line reads something like:
 
@@ -93,6 +96,7 @@ Seven fields, in reading order:
 | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Record this officer now, without leaving the field. |
 | <kbd>Alt</kbd>+<kbd>↓</kbd> *(or <kbd>→</kbd>)* | Record and go to the next officer. |
 | <kbd>Alt</kbd>+<kbd>↑</kbd> *(or <kbd>←</kbd>)* | Record and go back to the previous officer. |
+| <kbd>Alt</kbd>+<kbd>PgDn</kbd> / <kbd>PgUp</kbd> | Next / previous **page**. |
 | <kbd>Alt</kbd>+<kbd>G</kbd> | Mark a character you cannot read (see §6). |
 | <kbd>Esc</kbd> | Close the suggestion list. |
 
@@ -107,6 +111,13 @@ from there.
 Stepping past an officer you have not read records nothing: a carried 兵科 on its
 own is not a reading, and nothing is recorded for an officer until you type
 something of your own.
+
+### An officer somebody has already read
+
+Their reading is shown in the form, above it a line saying who recorded it.
+Nothing you do overwrites it — readings are only ever added, so editing one
+records a *new* reading alongside theirs rather than replacing it. Normally you
+should move on; correct it only if it is actually wrong, and say why in 備考.
 
 **Leaving an officer records them.** You cannot lose an officer by stepping away
 from them. A blank officer is not recorded, and re-recording an unchanged one
@@ -177,15 +188,12 @@ Try once more; if it persists, stop and report it rather than retyping the page.
 
 Known and being fixed. Until then:
 
-- **Note the frame number you stop at.** The workstation always reopens at frame
-  100. Without your own note there is no way to tell where you left off.
-- **Nothing tells you which pages of the volume are done.** Keep a list, or
-  agree page ranges with whoever else is transcribing.
-- **An officer someone else already recorded shows an empty form.** The counter
-  says how many are done, but not what was read — so check with them rather than
-  re-reading a row that is already finished.
-- **Finishing the last officer on a page does nothing visible.** When the officer
-  counter stops advancing, the page is done — change the frame in the top bar.
+- **Nothing tells you which pages of the volume are done.** The counter covers
+  the page you are on, not the volume — so keep a list, or agree page ranges with
+  whoever else is transcribing. This is the next thing being fixed.
+- **A recorded 兵科 or 階級 comes back in its standard form.** Record 步兵 and it
+  reappears as 歩兵: the database stores the branch, not the shape of the
+  character. Both mean `hohei`, and nothing has been changed on the page.
 
 ## 9. Setting it up once
 
