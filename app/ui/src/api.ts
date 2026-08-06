@@ -210,6 +210,26 @@ export const fetchObservations = (pid: string, frame: number) =>
     `/volumes/${encodeURIComponent(pid)}/pages/${frame}/observations`,
   );
 
+/** One frame of a volume that has been read. Unread frames are not returned. */
+export interface FrameProgress {
+  frame_no: number;
+  /** Readings, which are append-only — a re-read row counts twice. */
+  observations: number;
+  /** Distinct officer rows touched on that frame. */
+  rows_read: number;
+  last_touched: string;
+}
+
+export interface VolumeProgress {
+  pid: string;
+  frames_with_readings: number;
+  observations: number;
+  frames: FrameProgress[];
+}
+
+export const fetchVolumeProgress = (pid: string) =>
+  get<VolumeProgress>(`/volumes/${encodeURIComponent(pid)}/progress`);
+
 /**
  * Resolve a printed form to its controlled-vocabulary entry.
  *

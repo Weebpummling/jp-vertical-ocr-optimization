@@ -103,6 +103,7 @@ Two behaviours worth keeping when this grows:
 | `POST /volumes/{pid}/pages/{frame}/cells` | Persist the page's officer geometry as `roster_cell` rows (idempotent per `row_index`) |
 | `POST /volumes/{pid}/pages/{frame}/observations` | Record one officer as a human read them |
 | `GET /volumes/{pid}/pages/{frame}/observations` | What has been recorded for a page |
+| `GET /volumes/{pid}/progress` | Which frames of the volume carry readings — the coverage question |
 
 Three rules are enforced rather than documented:
 
@@ -241,11 +242,13 @@ what they cost, with the workaround the guide currently tells readers to use:
    buttons) move between frames, and the last page that loaded is remembered per
    browser, so a session reopens where it stopped instead of at a hard-coded
    frame 100.
-3. **No volume-level progress.** *Still open — the next thing to do.* The status
-   line counts the current page only, so "which pages are done?" cannot be
-   answered from the UI — the coverage question the project names as its first
-   risk is exactly the one an operator cannot see. It needs a per-volume roll-up
-   endpoint; the per-page observations query already has the shape.
+3. ~~**No volume-level progress.**~~ **Fixed 3 Aug 2026.** `GET
+   /volumes/{pid}/progress` rolls up which frames carry readings, and the UI
+   shows pages-read, whether the current page has been worked, and a jump to the
+   next unread frame. Frames with nothing recorded are omitted rather than
+   returned as zeroes — unread is the default state across hundreds of pages.
+   Counts distinguish `rows_read` from `observations` because readings are
+   append-only, so a re-read row is two readings of one row, not two rows.
 4. ~~**Finishing the last officer on a page is silent.**~~ **Fixed 3 Aug 2026.**
    The last officer says so and points at the page-advance key, and the status
    line marks a page whose officers are all recorded as complete.
@@ -253,6 +256,12 @@ what they cost, with the workaround the guide currently tells readers to use:
    pass 1, **fixed 3 Aug 2026.** The listing endpoint already returned every
    field; the UI kept only "saved" and the author. It now shows the reading with
    a line naming who recorded it, codes resolved back through the vocabulary.
+
+6. ~~**A page in flight showed the previous page's numbers.**~~ **Fixed
+   3 Aug 2026.** An uncached frame is fetched from NDL, so a load is not
+   instant; the status line kept the old page's "N recorded" under a frame box
+   already showing the new number, which reads as "this page is done". It now
+   says `loading frame N…`. Found by being misled by it while testing (3).
 
 Each fix was built and driven in a browser against a real page of pid 1449426
 before landing, and `OPERATING.md` moves with the software rather than after it.

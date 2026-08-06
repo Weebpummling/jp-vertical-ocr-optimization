@@ -166,6 +166,69 @@ class ConstraintTests(TempDatabase):
             self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
 
 
+class VolumeProgressTests(TempDatabase):
+    """Coverage — which frames have been read — asked of the database.
+
+    This is the guard against silent incompleteness: an annotator who cannot see
+    what is left keeps their own list, and a list is a thing that goes stale.
+    """
+
+    def frame(self, frame_no: int) -> str:
+        """A second registered page in the same volume."""
+        page_id = db.new_id()
+        with db.session() as conn:
+            conn.execute(
+                "INSERT INTO source_page (page_id, volume_id, frame_no) VALUES (?,?,?)",
+                (page_id, self.volume_id, frame_no))
+        return page_id
+
+    def record(self, page_id: str, row_index: int, name: str = "平岩棟一") -> None:
+        cells = db.upsert_cells(page_id, [{"index": row_index, "bbox": [1, 2, 3, 4]}],
+                                self.user_id)
+        db.create_observation(page_id=page_id, cell_id=cells[0]["cell_id"],
+                              as_of_date="1933-09-01", user_id=self.user_id,
+                              values={"name_raw": name})
+
+    def test_a_volume_nobody_has_read_reports_nothing(self):
+        self.assertEqual(db.volume_progress("test-pid"), [])
+
+    def test_frames_without_readings_are_omitted_not_zeroed(self):
+        """A volume is hundreds of pages; unread is the default, not a row."""
+        self.record(self.page_id, 0)
+        self.frame(2)  # registered, never read
+        frames = db.volume_progress("test-pid")
+        self.assertEqual([f["frame_no"] for f in frames], [1])
+
+    def test_counts_are_per_frame_and_in_frame_order(self):
+        other = self.frame(7)
+        self.record(self.page_id, 0)
+        self.record(self.page_id, 1, "乾忠夫")
+        self.record(other, 0)
+        frames = db.volume_progress("test-pid")
+        self.assertEqual([(f["frame_no"], f["rows_read"]) for f in frames],
+                         [(1, 2), (7, 1)])
+
+    def test_a_re_read_row_counts_once_as_a_row_and_twice_as_a_reading(self):
+        """Readings are append-only, so the two numbers answer different questions."""
+        self.record(self.page_id, 0)
+        self.record(self.page_id, 0, "平岩楝一")  # same row, a second reader
+        frame = db.volume_progress("test-pid")[0]
+        self.assertEqual(frame["rows_read"], 1)
+        self.assertEqual(frame["observations"], 2)
+
+    def test_another_volume_is_not_counted(self):
+        self.record(self.page_id, 0)
+        with db.session() as conn:
+            other_volume, other_page = db.new_id(), db.new_id()
+            conn.execute("INSERT INTO source_volume (volume_id, title, pid, edition_date) "
+                         "VALUES (?,'other','other-pid','1935-09-01')", (other_volume,))
+            conn.execute("INSERT INTO source_page (page_id, volume_id, frame_no) "
+                         "VALUES (?,?,1)", (other_page, other_volume))
+        self.record(other_page, 0)
+        self.assertEqual([f["frame_no"] for f in db.volume_progress("test-pid")], [1])
+        self.assertEqual(db.volume_progress("other-pid")[0]["observations"], 1)
+
+
 class UnreadableCharacterTests(TempDatabase):
     """A character nobody can read must not block the record.
 

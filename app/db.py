@@ -321,6 +321,40 @@ def observations_for_page(page_id: str, cur: sqlite3.Cursor | None = None) -> li
         return [dict(r) for r in own.fetchall()]
 
 
+def volume_progress(pid: str, cur: sqlite3.Cursor | None = None) -> list[dict]:
+    """Which frames of a volume have readings, and how many, per frame.
+
+    The coverage question - "what is left?" - asked of the database rather than
+    of somebody's notepad. Only frames with at least one observation come back:
+    a volume is hundreds of pages and the empty ones are the default, so sending
+    them all would be a row per frame to say nothing.
+
+    Counts are of *observations*, not distinct officers. Readings are
+    append-only, so a row re-read by a second worker counts twice - which is why
+    the caller compares against the officers actually on the page rather than
+    treating this as a completion percentage.
+    """
+    sql = """
+            SELECT p.frame_no,
+                   COUNT(o.obs_id)             AS observations,
+                   COUNT(DISTINCT c.row_index) AS rows_read,
+                   MAX(o.created_at)           AS last_touched
+              FROM source_volume v
+              JOIN source_page p   ON p.volume_id = v.volume_id
+              JOIN observation o   ON o.page_id = p.page_id
+              JOIN roster_cell c   ON c.cell_id = o.cell_id
+             WHERE v.pid = ?
+          GROUP BY p.frame_no
+          ORDER BY p.frame_no
+    """
+    if cur is not None:
+        cur.execute(sql, (pid,))
+        return [dict(r) for r in cur.fetchall()]
+    with read_session() as own:
+        own.execute(sql, (pid,))
+        return [dict(r) for r in own.fetchall()]
+
+
 def set_volume_edition_date(volume_id: str, edition_date, user_id: str) -> None:
     with actor_session(user_id) as cur:
         cur.execute("UPDATE source_volume SET edition_date = ? WHERE volume_id = ?",

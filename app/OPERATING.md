@@ -59,6 +59,25 @@ Once a page loads, the status line reads something like:
   missing is normal; several missing usually shows up as **needs review**.
 - **skew** — how tilted the scan is. Large values are worth mentioning.
 
+### Knowing what is left
+
+Under the page line is the volume line:
+
+> volume: **12** pages read · 240 readings · *this page has readings* ·
+> *next unread: 118*
+
+- **pages read** counts frames with at least one reading — by anyone, not just
+  you — so it answers "what is left in this volume?" rather than "what have I
+  done today?".
+- **this page has readings** means somebody has already worked here. Check the
+  officers before starting; you may be duplicating.
+- **next unread** appears once you are inside a run of finished pages, and jumps
+  to the first frame nobody has touched. It is the quickest way back to useful
+  work after a break.
+
+*Readings* counts recordings, not officers: a row read by two people counts
+twice, on purpose — nothing is overwritten, so both readings survive.
+
 Two messages mean *stop and tell someone* rather than work around them:
 
 | What you see | What it means |
@@ -188,9 +207,6 @@ Try once more; if it persists, stop and report it rather than retyping the page.
 
 Known and being fixed. Until then:
 
-- **Nothing tells you which pages of the volume are done.** The counter covers
-  the page you are on, not the volume — so keep a list, or agree page ranges with
-  whoever else is transcribing. This is the next thing being fixed.
 - **A recorded 兵科 or 階級 comes back in its standard form.** Record 步兵 and it
   reappears as 歩兵: the database stores the branch, not the shape of the
   character. Both mean `hohei`, and nothing has been changed on the page.

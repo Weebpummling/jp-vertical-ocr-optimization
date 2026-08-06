@@ -339,6 +339,23 @@ def list_observations(pid: str, frame: int) -> dict:
     return {"page_id": str(page["page_id"]), "observations": rows}
 
 
+@app.get("/volumes/{pid}/progress")
+def volume_progress(pid: str) -> dict:
+    """Which frames of this volume have readings — the coverage question.
+
+    Frames with nothing recorded are omitted rather than returned as zeroes: a
+    volume runs to hundreds of pages and unread is the default state, so listing
+    them all would be hundreds of rows saying nothing.
+    """
+    frames = db.volume_progress(pid)
+    return {
+        "pid": pid,
+        "frames_with_readings": len(frames),
+        "observations": sum(f["observations"] for f in frames),
+        "frames": frames,
+    }
+
+
 def _service_id(iiif_client, pid: str, frame: int) -> str | None:
     try:
         canvases = iiif_client.canvases(iiif_client.manifest(pid))

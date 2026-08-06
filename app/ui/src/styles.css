@@ -151,6 +151,18 @@ kbd {
 }
 .already strong { color: var(--ink); }
 
+/* Volume coverage, beside the per-page counter: what is left, not just what is
+   on screen. */
+.coverage {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.coverage strong { color: var(--ink); }
+
 .options {
   list-style: none;
   margin: 0.25rem 0 0;

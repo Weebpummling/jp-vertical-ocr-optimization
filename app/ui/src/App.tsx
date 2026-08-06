@@ -19,8 +19,10 @@ import {
   saveObservation,
   storedIdCode,
   whoami,
+  fetchVolumeProgress,
   type PageObservation,
   type RegisteredPage,
+  type VolumeProgress,
   type Vocab,
   type Worker,
 } from "./api";
@@ -79,6 +81,9 @@ export default function App() {
   // `entries`, which is what *this* session typed: an officer someone else read
   // should show their reading without it being mistaken for the current worker's.
   const [recorded, setRecorded] = useState<Record<number, PageObservation>>({});
+  // Which frames of this volume have been read at all — the "what is left?"
+  // question, which the page-level counter cannot answer.
+  const [progress, setProgress] = useState<VolumeProgress | null>(null);
 
   // What was on screen when each officer was last saved. Tabbing back through a
   // finished officer must not post a second draft; editing one deliberately
@@ -150,6 +155,11 @@ export default function App() {
         }
         setSaves(existing);
         setRecorded(byRow);
+        // Volume coverage, refreshed per page load so it reflects other workers
+        // too. Its own failure must not take the page down with it.
+        fetchVolumeProgress(p)
+          .then(setProgress)
+          .catch(() => setProgress(null));
       } catch {
         setDbWarning(
           `${p} frame ${f} is not registered in the database, so nothing can be ` +
@@ -347,6 +357,13 @@ export default function App() {
 
   const savedCount = Object.values(saves).filter((s) => s.state === "saved").length;
 
+  // Where to go next: the first frame after this one that nobody has recorded
+  // anything on. Walking the read set beats "current + 1", which is right only
+  // until you have worked through a run of pages.
+  const readFrames = new Set(progress?.frames.map((f) => f.frame_no) ?? []);
+  let nextUnread = frame + 1;
+  while (readFrames.has(nextUnread)) nextUnread++;
+
   return (
     <div className="app">
       <header className="topbar">
@@ -391,7 +408,12 @@ export default function App() {
             next ›
           </button>
         </form>
-        {page && (
+        {/* While a page is in flight the previous page's numbers are still in
+            state. Leaving them under a frame box that already shows the new
+            number reads as "this page is done" — so say what is happening
+            instead. An uncached frame is fetched from NDL, which is not instant. */}
+        {loading && <p className="status">loading frame {frame}…</p>}
+        {page && !loading && (
           <p className="status">
             <code>{page.template_id}</code> · {page.officer_count} officers ·{" "}
             {savedCount} recorded · {page.bands_matched}/{page.bands_total} bands ·
@@ -403,6 +425,28 @@ export default function App() {
               <span className="tag tag--done">
                 page complete — Alt+PageDown for the next
               </span>
+            )}
+          </p>
+        )}
+        {progress && !loading && (
+          <p className="coverage">
+            volume: <strong>{progress.frames_with_readings}</strong>{" "}
+            {progress.frames_with_readings === 1 ? "page" : "pages"} read ·{" "}
+            {progress.observations} readings
+            {readFrames.has(frame) && (
+              <span className="tag tag--done">this page has readings</span>
+            )}
+            {nextUnread !== frame + 1 && (
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => {
+                  setFrame(nextUnread);
+                  load(pid, nextUnread);
+                }}
+              >
+                next unread: {nextUnread}
+              </button>
             )}
           </p>
         )}
