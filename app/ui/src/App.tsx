@@ -164,6 +164,13 @@ export default function App() {
         fetchVolumeProgress(p)
           .then(setProgress)
           .catch(() => setProgress(null));
+
+        // Resume where the page was left, rather than at an officer already
+        // done. Half-finished pages are the normal case once more than one
+        // person works a volume, and re-reading a finished officer to find the
+        // edge of the work is pure waste.
+        const nextOpen = data.officers.findIndex((o) => !(o.index in existing));
+        if (nextOpen > 0) setOfficerIndex(nextOpen);
       } catch {
         setDbWarning(
           `${p} frame ${f} is not registered in the database, so nothing can be ` +
