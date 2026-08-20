@@ -189,6 +189,41 @@ def find_page(pid: str, frame: int) -> dict | None:
         return dict(row) if row else None
 
 
+def date_above(page_id: str, row_index: int) -> dict | None:
+    """The recorded date on the row immediately above, for resolving 同.
+
+    Strictly row_index - 1, never "the nearest row that happens to have a date".
+    A ditto means *the entry directly above*, so if that entry has no date the
+    ditto cannot be resolved and must be refused. Reaching further up to find
+    something to copy would attach a date the page does not claim, and it would
+    do it invisibly - the failure mode this project exists to avoid.
+
+    A chain of dittos still resolves, because a resolved ditto is stored as the
+    concrete date it meant, so the next row down finds a real value above it.
+
+    Latest reading wins, tie-broken on `rowid` (insertion order) rather than
+    `created_at`: that column has one-second resolution, and two readings of a
+    row within one second is exactly what a correction looks like.
+    """
+    if row_index <= 0:
+        return None
+    with read_session() as cur:
+        cur.execute(
+            """
+            SELECT c.row_index, o.commissioning_date
+              FROM observation o
+              JOIN roster_cell c ON c.cell_id = o.cell_id
+             WHERE o.page_id = ? AND c.row_index = ?
+          ORDER BY o.rowid DESC
+             LIMIT 1
+            """,
+            (page_id, row_index - 1))
+        row = cur.fetchone()
+        if not row or not row["commissioning_date"]:
+            return None
+        return dict(row)
+
+
 def ensure_template(spec: dict, user_id: str) -> str:
     """Upsert a template artifact into `layout_template`, returning its id.
 
@@ -311,7 +346,7 @@ def observations_for_page(page_id: str, cur: sqlite3.Cursor | None = None) -> li
               JOIN roster_cell c ON c.cell_id = o.cell_id
          LEFT JOIN app_user u ON u.user_id = o.author_user_id
              WHERE o.page_id = ?
-          ORDER BY c.row_index
+          ORDER BY c.row_index, o.rowid
     """
     if cur is not None:
         cur.execute(sql, (page_id,))

@@ -168,6 +168,8 @@ export interface SavedObservation {
   commissioning_date: string | null;
   /** Fields the server would not accept as read — shown, never hidden. */
   flagged: Record<string, { raw?: string; refused?: string }>;
+  /** What a ditto mark (同) resolved to, and which row it came from. */
+  inherited?: { raw: string; from_row: number; value: string } | null;
 }
 
 export interface PageObservation {

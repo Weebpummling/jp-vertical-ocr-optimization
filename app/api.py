@@ -300,13 +300,41 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
     # so a bad value never enters the panel wearing the same clothes as a good
     # one. app/README: "ambiguous parses are flagged, not guessed".
     parsed_date = None
+    inherited = None
     if body.commissioning_date:
-        parsed = eradate.parse(body.commissioning_date)
-        if parsed.ok:
-            parsed_date = parsed.value
+        if eradate.is_ditto(body.commissioning_date):
+            # 同 is a reading, not a date: it says "the same as the entry above".
+            # Resolving it against the row above is reading the page as printed,
+            # not guessing - so it is allowed, and it is recorded as inherited so
+            # nobody later mistakes it for a date that was actually written out.
+            above = db.date_above(page["page_id"], body.row_index)
+            if above:
+                parsed_date = above["commissioning_date"]
+                inherited = {"raw": body.commissioning_date,
+                             "from_row": above["row_index"],
+                             "value": above["commissioning_date"]}
+                confidence["commissioning_date"] = {
+                    "raw": body.commissioning_date,
+                    "inherited_from_row": above["row_index"],
+                    "note": "printed as a ditto mark; same as the entry above",
+                }
+            else:
+                confidence["commissioning_date"] = {
+                    "raw": body.commissioning_date,
+                    "refused": (
+                        "printed as a ditto mark, but the officer directly above "
+                        f"(no. {body.row_index} on this page) has no recorded date "
+                        "to inherit. Record that one first, or type this date out "
+                        "in full. A ditto is never resolved from further up the "
+                        "column - that would attach a date the page does not claim"),
+                }
         else:
-            confidence["commissioning_date"] = {
-                "raw": body.commissioning_date, "refused": parsed.reason}
+            parsed = eradate.parse(body.commissioning_date)
+            if parsed.ok:
+                parsed_date = parsed.value
+            else:
+                confidence["commissioning_date"] = {
+                    "raw": body.commissioning_date, "refused": parsed.reason}
     values["commissioning_date"] = parsed_date
     values["field_confidence"] = confidence
 
@@ -318,7 +346,11 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
         "obs_id": saved["obs_id"],
         "status": saved["status"],
         "as_of_date": page["edition_date"],
-        "commissioning_date": parsed_date.isoformat() if parsed_date else None,
+        "commissioning_date": (parsed_date.isoformat()
+                               if hasattr(parsed_date, "isoformat") else parsed_date),
+        # What a ditto mark resolved to, so the reader sees the date they did not
+        # type and can catch it landing on the wrong row.
+        "inherited": inherited,
         # Only refusals. A field carrying 〓 for a character nobody could read was
         # still saved, with what the reader *could* see - reporting it as
         # "not recorded" would be a lie, and would teach annotators to distrust

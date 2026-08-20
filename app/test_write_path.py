@@ -9,6 +9,7 @@ What they pin is what is easy to lose quietly: attribution, refusal over
 guessing, idempotency, and the constraints that stop a bad row existing at all.
 """
 
+import json
 import os
 import sqlite3
 import sys
@@ -276,6 +277,102 @@ class UnreadableCharacterTests(TempDatabase):
         self.assertIn("commissioning_date", result["flagged"])
         self.assertEqual(result["needs_recheck"], {})
         self.assertIsNone(result["commissioning_date"])
+
+
+class DittoTests(TempDatabase):
+    """同 means "same as the entry above" — the rosters ditto dates down a column.
+
+    Resolving it is reading the page as printed. Guessing at it would not be, so
+    the resolution is recorded as inherited, and a ditto with nothing above it is
+    refused rather than filled in from somewhere convenient.
+    """
+
+    def setUp(self):
+        super().setUp()
+        import api
+        from api import ObservationIn
+        self.api, self.ObservationIn = api, ObservationIn
+        # Ten cells, as a real page has.
+        db.upsert_cells(self.page_id,
+                        [{"index": i, "bbox": [1, 2, 3, 4]} for i in range(10)],
+                        self.user_id)
+
+    def record(self, row_index, **body):
+        return self.api.create_observation(
+            "test-pid", 1, self.ObservationIn(row_index=row_index, **body),
+            {"user_id": self.user_id})
+
+    def test_a_ditto_takes_the_date_of_the_row_above(self):
+        self.record(0, name_raw="平岩棟一", commissioning_date="明四三、一二、二六")
+        result = self.record(1, name_raw="乾忠夫", commissioning_date="同")
+        self.assertEqual(result["commissioning_date"], "1910-12-26")
+        self.assertEqual(result["inherited"]["from_row"], 0)
+        self.assertEqual(result["flagged"], {})
+
+    def test_the_inheritance_is_recorded_not_silent(self):
+        self.record(0, commissioning_date="明四三、一二、二六")
+        self.record(1, commissioning_date="同")
+        with db.read_session() as cur:
+            cur.execute(
+                "SELECT o.field_confidence FROM observation o "
+                "JOIN roster_cell c ON c.cell_id = o.cell_id "
+                "WHERE c.row_index = 1 ORDER BY o.rowid DESC LIMIT 1")
+            flags = json.loads(cur.fetchone()["field_confidence"])
+        self.assertEqual(flags["commissioning_date"]["inherited_from_row"], 0)
+        self.assertEqual(flags["commissioning_date"]["raw"], "同")
+
+    def test_a_ditto_chain_resolves_through_earlier_dittos(self):
+        """A run of officers sharing one date is printed once and dittoed down."""
+        self.record(0, commissioning_date="明四三、一二、二六")
+        self.record(1, commissioning_date="同")
+        result = self.record(2, commissioning_date="同")
+        self.assertEqual(result["commissioning_date"], "1910-12-26")
+        self.assertEqual(result["inherited"]["from_row"], 1)
+
+    def test_a_ditto_is_refused_when_the_row_above_has_no_date(self):
+        """It must never reach further up the column to find something to copy.
+
+        The row above may have been refused or left blank. Taking the nearest
+        row that does have a date would attach one the page does not claim, and
+        would do it invisibly - which is worse than refusing.
+        """
+        self.record(0, commissioning_date="明四三、一二、二六")
+        self.record(1, name_raw="date refused on this one",
+                    commissioning_date="明四三、一二")     # incomplete: no day
+        result = self.record(2, commissioning_date="同")
+        self.assertIsNone(result["commissioning_date"])
+        self.assertIsNone(result["inherited"])
+        refused = result["flagged"]["commissioning_date"]["refused"]
+        self.assertIn("directly above", refused)
+
+    def test_a_ditto_does_not_reach_past_an_unrecorded_row(self):
+        self.record(0, commissioning_date="明四三、一二、二六")
+        result = self.record(2, commissioning_date="同")   # row 1 never recorded
+        self.assertIsNone(result["commissioning_date"])
+        self.assertIsNone(result["inherited"])
+
+    def test_a_corrected_row_above_lets_the_ditto_resolve(self):
+        """Re-reading the row above supersedes; the ditto then has a source."""
+        self.record(0, commissioning_date="明四三、一二、二六")
+        self.record(1, commissioning_date="明四三、一二")            # refused
+        self.assertIsNone(self.record(2, commissioning_date="同")["commissioning_date"])
+        self.record(1, commissioning_date="明四三、一二、二七")       # corrected
+        result = self.record(2, commissioning_date="同")
+        self.assertEqual(result["commissioning_date"], "1910-12-27")
+        self.assertEqual(result["inherited"]["from_row"], 1)
+
+    def test_a_ditto_with_nothing_above_it_is_refused(self):
+        """Never fill it in from somewhere convenient."""
+        result = self.record(0, name_raw="first on the page", commissioning_date="同")
+        self.assertIsNone(result["commissioning_date"])
+        self.assertIsNone(result["inherited"])
+        self.assertIn("ditto", result["flagged"]["commissioning_date"]["refused"])
+
+    def test_a_real_date_is_untouched_by_any_of_this(self):
+        self.record(0, commissioning_date="明四三、一二、二六")
+        result = self.record(1, commissioning_date="大九、一二、二一")
+        self.assertEqual(result["commissioning_date"], "1920-12-21")
+        self.assertIsNone(result["inherited"])
 
 
 class DateNormalisationTests(unittest.TestCase):

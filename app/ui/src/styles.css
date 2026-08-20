@@ -327,3 +327,13 @@ kbd {
 .toolkit__from { font: 0.95rem var(--font-jp); color: var(--muted); }
 .toolkit__arrow { font-size: 0.7rem; color: var(--muted); }
 .toolkit__to { font: 1.05rem var(--font-jp); color: var(--ink); }
+
+.save__inherited {
+  margin: 0.5rem 0 0;
+  padding: 0.35rem 0.5rem;
+  border-left: 3px solid var(--provisional);
+  background: #faf7fd;
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.save__inherited b { font-family: var(--font-jp); }

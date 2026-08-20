@@ -346,6 +346,13 @@ export function EntryForm({
             separate act
           </p>
         )}
+        {saveState?.inherited && (
+          <p className="save__inherited">
+            任官年月日 <b>{saveState.inherited.raw}</b> — took{" "}
+            <b>{saveState.inherited.value}</b> from officer{" "}
+            {saveState.inherited.from_row + 1}. Check that is the row it points at.
+          </p>
+        )}
         {saveState?.state === "error" && (
           <p className="save__err">not recorded: {saveState.message}</p>
         )}

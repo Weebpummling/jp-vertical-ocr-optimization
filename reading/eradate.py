@@ -31,6 +31,20 @@ DIGITS = {"〇": 0, "一": 1, "二": 2, "三": 3, "四": 4,
 # the same day. A trailing 日 just yields an empty final part, which is dropped.
 SEPARATORS = "、,，. ・年月日"
 
+# "Same as the entry above". The rosters use it heavily in the date columns -
+# a run of officers commissioned on one day is printed once and dittoed down -
+# and it is a reading, not a date: 同 carries no year of its own. Resolving it
+# means looking at the row above, which is why it is handled where the page is
+# known rather than here. 上 is the "above" in 同上; 〃 and the quote-like forms
+# turn up in later printings.
+DITTO_MARKS = frozenset("同仝〃〆″”")
+
+
+def is_ditto(text: str | None) -> bool:
+    """True when a cell says 'same as above' rather than stating a value."""
+    stripped = (text or "").strip().rstrip("上")
+    return bool(stripped) and all(char in DITTO_MARKS for char in stripped)
+
 
 @dataclass(frozen=True)
 class Parsed:

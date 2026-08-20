@@ -88,6 +88,8 @@ export interface SaveState {
   flagged?: Record<string, { raw?: string; refused?: string }>;
   /** Set when the row was already on the page before this session. */
   author?: string;
+  /** A 同 that resolved: the date the reader did not type, and its source row. */
+  inherited?: { raw: string; from_row: number; value: string } | null;
 }
 
 const trimmed = (values: Values, key: string): string =>

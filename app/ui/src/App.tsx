@@ -366,7 +366,8 @@ export default function App() {
         savedSnapshot.current[index] = snapshot;
         setSaves((s) => ({
           ...s,
-          [index]: { state: "saved", flagged: saved.flagged },
+          [index]: { state: "saved", flagged: saved.flagged,
+                     inherited: saved.inherited },
         }));
       } catch (e) {
         if (e instanceof NotIdentified) {
