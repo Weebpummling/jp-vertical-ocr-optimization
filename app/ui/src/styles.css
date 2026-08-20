@@ -337,3 +337,16 @@ kbd {
   color: var(--ink);
 }
 .save__inherited b { font-family: var(--font-jp); }
+
+.toolkit__ditto {
+  border: 1px dashed var(--provisional);
+  background: #fff;
+  color: var(--provisional);
+  border-radius: 3px;
+  padding: 0.1rem 0.5rem;
+  font: 0.8rem var(--font-jp);
+  cursor: pointer;
+}
+.toolkit__ditto:hover { background: #faf7fd; }
+.save__inherited ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+.save__inherited p { margin: 0; }

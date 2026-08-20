@@ -23,18 +23,26 @@
  * the first time one does.
  */
 import type { Vocab } from "../api";
-import { GETA, swapsFor } from "../observation";
+import { DITTO, GETA, swapsFor } from "../observation";
 
 interface Props {
   /** Current text of the focused field. */
   value: string;
+  /** Mark this cell "same as the entry above". */
+  onDitto: () => void;
   vocab: Vocab | null;
   onChange: (next: string) => void;
   /** Insert the geta mark where the caret is. */
   onGeta: () => void;
 }
 
-export function DifficultCharacter({ value, vocab, onChange, onGeta }: Props) {
+export function DifficultCharacter({
+  value,
+  vocab,
+  onChange,
+  onGeta,
+  onDitto,
+}: Props) {
   const swaps = swapsFor(value, vocab);
   const unread = value.split(GETA).length - 1;
 
@@ -53,6 +61,17 @@ export function DifficultCharacter({ value, vocab, onChange, onGeta }: Props) {
           title="Insert 〓 for a character that cannot be read (Alt+G)"
         >
           {GETA} can’t read this one
+        </button>
+        <button
+          type="button"
+          className="toolkit__ditto"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onDitto();
+          }}
+          title="This cell is a ditto — same as the entry above (Alt+D)"
+        >
+          {DITTO} same as above
         </button>
         {unread > 0 && (
           <span className="toolkit__count">

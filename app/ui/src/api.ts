@@ -159,6 +159,8 @@ export interface ObservationIn {
   commissioning_date?: string | null;
   field_confidence?: Record<string, unknown>;
   notes?: string | null;
+  /** Columns the reader marked 同; the server resolves them from the row above. */
+  ditto?: string[];
 }
 
 export interface SavedObservation {
@@ -168,8 +170,8 @@ export interface SavedObservation {
   commissioning_date: string | null;
   /** Fields the server would not accept as read — shown, never hidden. */
   flagged: Record<string, { raw?: string; refused?: string }>;
-  /** What a ditto mark (同) resolved to, and which row it came from. */
-  inherited?: { raw: string; from_row: number; value: string } | null;
+  /** What each ditto (同) resolved to, keyed by column, and which row it came from. */
+  inherited?: Record<string, { raw: string; from_row: number; value: string }>;
 }
 
 export interface PageObservation {

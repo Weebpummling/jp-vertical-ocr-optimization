@@ -29,6 +29,37 @@ export type Values = Record<string, string>;
  */
 export const GETA = "〓";
 
+/**
+ * Ditto marks — "same as the entry above".
+ *
+ * These rosters ditto everything: a run of officers sharing a branch, rank,
+ * posting or commissioning date is printed once and marked down the column. The
+ * mark is a reading, not a value, so the client only says *which columns* were
+ * dittoed and the server resolves them against the row above — it is the one
+ * that knows what is on that row. See reading/ditto.py for the rules.
+ */
+const DITTO_MARKS = "同仝〃〆″”";
+
+/** What Alt+D types: the form the rosters print. */
+export const DITTO = "同";
+
+export const isDitto = (text: string | null | undefined): boolean => {
+  const stripped = (text ?? "").trim().replace(/上+$/, "");
+  return stripped.length > 0 && [...stripped].every((c) => DITTO_MARKS.includes(c));
+};
+
+/** Form field → the observation column a ditto in it resolves against. */
+const DITTO_COLUMN: Record<string, string> = {
+  seniority_no: "seniority_no",
+  name_raw: "name_raw",
+  branch: "branch_code",
+  rank: "rank_code",
+  post: "post",
+  commissioning_date: "commissioning_date",
+  // 備考 is absent on purpose: it is not a column, and "same as above" has no
+  // sensible meaning for a reader's free-text note.
+};
+
 export interface Refusal {
   raw: string;
   refused: string;
@@ -88,8 +119,8 @@ export interface SaveState {
   flagged?: Record<string, { raw?: string; refused?: string }>;
   /** Set when the row was already on the page before this session. */
   author?: string;
-  /** A 同 that resolved: the date the reader did not type, and its source row. */
-  inherited?: { raw: string; from_row: number; value: string } | null;
+  /** Dittos that resolved: values the reader did not type, and their source rows. */
+  inherited?: Record<string, { raw: string; from_row: number; value: string }>;
 }
 
 const trimmed = (values: Values, key: string): string =>
@@ -107,6 +138,15 @@ export function buildObservation(
   cropUrls: Record<string, string | null> = {},
 ): ObservationIn {
   const confidence: Record<string, Refusal | Unreadable> = {};
+
+  // Columns the reader marked "same as above". Declared rather than left for the
+  // server to sniff out of the values: by the time 兵科 and 階級 are sent they
+  // are vocabulary codes, and a ditto is not a code.
+  const ditto: string[] = [];
+  for (const [key, column] of Object.entries(DITTO_COLUMN)) {
+    if (isDitto(values[key])) ditto.push(column);
+  }
+  const dittoed = (key: string) => isDitto(values[key]);
 
   // A value containing 〓 is saved as read. What travels with it is where to
   // look: the count of unread characters and the crop they are in.
@@ -128,7 +168,7 @@ export function buildObservation(
 
   const vocabCode = (key: string, entries: VocabEntry[] | undefined) => {
     const typed = trimmed(values, key);
-    if (!typed) return null;
+    if (!typed || dittoed(key)) return null;   // a ditto is resolved server-side
     const resolved = resolveVocab(entries ?? [], typed);
     if (resolved) return resolved.code;
     if (!alreadyExplained(key)) {
@@ -140,7 +180,7 @@ export function buildObservation(
     return null;
   };
 
-  const seniorityTyped = trimmed(values, "seniority_no");
+  const seniorityTyped = dittoed("seniority_no") ? "" : trimmed(values, "seniority_no");
   let seniority: number | null = null;
   if (seniorityTyped) {
     // Half-width, full-width (１２３) and kanji-digit readings all appear on the
@@ -160,12 +200,18 @@ export function buildObservation(
 
   return {
     row_index: rowIndex,
-    name_raw: trimmed(values, "name_raw") || null,
+    ditto,
+    // Dittoed fields go up empty: the mark says where to look, and the row above
+    // is what fills them in.
+    name_raw: (dittoed("name_raw") ? "" : trimmed(values, "name_raw")) || null,
     rank_code: vocabCode("rank", vocab?.ranks),
     branch_code: vocabCode("branch", vocab?.branches),
-    post: trimmed(values, "post") || null,
+    post: (dittoed("post") ? "" : trimmed(values, "post")) || null,
     seniority_no: seniority,
-    commissioning_date: trimmed(values, "commissioning_date") || null,
+    commissioning_date:
+      (dittoed("commissioning_date")
+        ? ""
+        : trimmed(values, "commissioning_date")) || null,
     notes: trimmed(values, "notes") || null,
     field_confidence: confidence,
   };

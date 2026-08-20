@@ -188,6 +188,33 @@ re-check against the image later.
 **Never guess a character to avoid the mark.** The mark is cheap; a plausible
 wrong name is expensive and invisible.
 
+## 6a. 同 — "same as the entry above"
+
+The rosters ditto everything. A run of officers sharing a branch, a rank, a
+posting or a commissioning date is printed once and marked 同 down the column,
+and any cell can be one.
+
+Type 同 in that cell, or press <kbd>Alt</kbd>+<kbd>D</kbd>. Don't copy the value
+down by hand: what the page prints is a ditto, and the record should say so.
+
+The server takes the value from **the officer directly above** and tells you what
+it took — "commissioning_date 1910-12-26 from officer 2". Check that is the row
+you meant. The record keeps the 同, the row it came from, and the fact that the
+value was inherited rather than written out, so nobody later reads it as a value
+the page stated.
+
+If the officer above has nothing in that column, the ditto is **refused**, and it
+names the row you need to record first. That is deliberate. It will not reach
+further up the column to find something to copy, because that would attach a
+value the page does not claim — and you would have no way of seeing it happen.
+So work down the page in order, and if a ditto is refused, fix the row above and
+come back to it.
+
+Each column is judged on its own. Dittoing four cells where the row above only
+has two of them fills the two and flags the other two.
+
+備考 cannot be dittoed: it is your note, not a column of the roster.
+
 ## 7. After you press record
 
 > recorded as a draft — confirmation is a separate act

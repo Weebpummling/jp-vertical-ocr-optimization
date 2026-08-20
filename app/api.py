@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "reading"))
 
 import page_service as ps  # noqa: E402
 import db  # noqa: E402
+import ditto  # noqa: E402
 import eradate  # noqa: E402
 
 app = FastAPI(
@@ -230,6 +231,10 @@ class ObservationIn(BaseModel):
     # reader's remark rides in `field_confidence` rather than being dropped on
     # the floor - it is a note about the reading, which is what that column is.
     notes: str | None = None
+    # Columns the reader marked 同 - "same as the entry above". Named explicitly
+    # rather than inferred from the values, because 兵科 and 階級 arrive as
+    # vocabulary codes by then and a ditto is not a code.
+    ditto: list[str] = Field(default_factory=list)
 
 
 def _require_page(pid: str, frame: int) -> dict:
@@ -299,42 +304,79 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
     # resolve is stored as no date at all, with the refusal recorded beside it,
     # so a bad value never enters the panel wearing the same clothes as a good
     # one. app/README: "ambiguous parses are flagged, not guessed".
-    parsed_date = None
-    inherited = None
-    if body.commissioning_date:
-        if eradate.is_ditto(body.commissioning_date):
-            # 同 is a reading, not a date: it says "the same as the entry above".
-            # Resolving it against the row above is reading the page as printed,
-            # not guessing - so it is allowed, and it is recorded as inherited so
-            # nobody later mistakes it for a date that was actually written out.
-            above = db.date_above(page["page_id"], body.row_index)
-            if above:
-                parsed_date = above["commissioning_date"]
-                inherited = {"raw": body.commissioning_date,
-                             "from_row": above["row_index"],
-                             "value": above["commissioning_date"]}
-                confidence["commissioning_date"] = {
-                    "raw": body.commissioning_date,
-                    "inherited_from_row": above["row_index"],
-                    "note": "printed as a ditto mark; same as the entry above",
-                }
-            else:
-                confidence["commissioning_date"] = {
-                    "raw": body.commissioning_date,
+    # --- ditto marks -------------------------------------------------------
+    #
+    # 同 says "same as the entry above" and nothing else, so it is resolved
+    # against the row directly above and recorded as inherited. reading/ditto.py
+    # holds the rules; the important one is that it never reaches further up the
+    # column than one row.
+    inherited: dict[str, dict] = {}
+    dittoed = [c for c in body.ditto if c in ditto.DITTOABLE]
+    if dittoed:
+        above = db.row_above(page["page_id"], body.row_index)
+        for column in dittoed:
+            value = above.get(column) if above else None
+            if value in (None, ""):
+                missing = ("has no recorded value in that column"
+                           if above else "has not been recorded yet")
+                confidence[column] = {
+                    "raw": "同",
                     "refused": (
-                        "printed as a ditto mark, but the officer directly above "
-                        f"(no. {body.row_index} on this page) has no recorded date "
-                        "to inherit. Record that one first, or type this date out "
-                        "in full. A ditto is never resolved from further up the "
-                        "column - that would attach a date the page does not claim"),
+                        f"printed as a ditto mark, but the officer directly above "
+                        f"(no. {body.row_index} on this page) {missing}. Record that "
+                        f"one first, or type this value out in full. A ditto is "
+                        f"never resolved from further up the column - that would "
+                        f"attach a value the page does not claim"),
                 }
-        else:
-            parsed = eradate.parse(body.commissioning_date)
-            if parsed.ok:
-                parsed_date = parsed.value
+                values[column] = None
+                continue
+            values[column] = value
+            inherited[column] = {"raw": "同", "from_row": above["row_index"],
+                                 "value": value}
+            confidence[column] = {
+                "raw": "同",
+                "inherited_from_row": above["row_index"],
+                "note": "printed as a ditto mark; same as the entry above",
+            }
+
+    # --- the date ----------------------------------------------------------
+    if "commissioning_date" in dittoed:
+        parsed_date = values.get("commissioning_date")
+    else:
+        parsed_date = None
+        if body.commissioning_date:
+            if ditto.is_ditto(body.commissioning_date):
+                # A ditto typed straight into the field, with no client to
+                # declare it. Same rules; resolve it rather than refuse a
+                # reading the page plainly makes.
+                above = db.row_above(page["page_id"], body.row_index)
+                stated = above.get("commissioning_date") if above else None
+                if stated:
+                    parsed_date = stated
+                    inherited["commissioning_date"] = {
+                        "raw": body.commissioning_date,
+                        "from_row": above["row_index"], "value": stated}
+                    confidence["commissioning_date"] = {
+                        "raw": body.commissioning_date,
+                        "inherited_from_row": above["row_index"],
+                        "note": "printed as a ditto mark; same as the entry above",
+                    }
+                else:
+                    confidence["commissioning_date"] = {
+                        "raw": body.commissioning_date,
+                        "refused": (
+                            "printed as a ditto mark, but the officer directly "
+                            f"above (no. {body.row_index} on this page) has no "
+                            "recorded date to inherit. Record that one first, or "
+                            "type this date out in full"),
+                    }
             else:
-                confidence["commissioning_date"] = {
-                    "raw": body.commissioning_date, "refused": parsed.reason}
+                parsed = eradate.parse(body.commissioning_date)
+                if parsed.ok:
+                    parsed_date = parsed.value
+                else:
+                    confidence["commissioning_date"] = {
+                        "raw": body.commissioning_date, "refused": parsed.reason}
     values["commissioning_date"] = parsed_date
     values["field_confidence"] = confidence
 
@@ -348,8 +390,8 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
         "as_of_date": page["edition_date"],
         "commissioning_date": (parsed_date.isoformat()
                                if hasattr(parsed_date, "isoformat") else parsed_date),
-        # What a ditto mark resolved to, so the reader sees the date they did not
-        # type and can catch it landing on the wrong row.
+        # What each ditto mark resolved to, keyed by column, so the reader sees
+        # the values they did not type and can catch one landing on the wrong row.
         "inherited": inherited,
         # Only refusals. A field carrying 〓 for a character nobody could read was
         # still saved, with what the reader *could* see - reporting it as

@@ -306,7 +306,7 @@ class DittoTests(TempDatabase):
         self.record(0, name_raw="平岩棟一", commissioning_date="明四三、一二、二六")
         result = self.record(1, name_raw="乾忠夫", commissioning_date="同")
         self.assertEqual(result["commissioning_date"], "1910-12-26")
-        self.assertEqual(result["inherited"]["from_row"], 0)
+        self.assertEqual(result["inherited"]["commissioning_date"]["from_row"], 0)
         self.assertEqual(result["flagged"], {})
 
     def test_the_inheritance_is_recorded_not_silent(self):
@@ -327,7 +327,7 @@ class DittoTests(TempDatabase):
         self.record(1, commissioning_date="同")
         result = self.record(2, commissioning_date="同")
         self.assertEqual(result["commissioning_date"], "1910-12-26")
-        self.assertEqual(result["inherited"]["from_row"], 1)
+        self.assertEqual(result["inherited"]["commissioning_date"]["from_row"], 1)
 
     def test_a_ditto_is_refused_when_the_row_above_has_no_date(self):
         """It must never reach further up the column to find something to copy.
@@ -341,7 +341,7 @@ class DittoTests(TempDatabase):
                     commissioning_date="明四三、一二")     # incomplete: no day
         result = self.record(2, commissioning_date="同")
         self.assertIsNone(result["commissioning_date"])
-        self.assertIsNone(result["inherited"])
+        self.assertEqual(result["inherited"], {})
         refused = result["flagged"]["commissioning_date"]["refused"]
         self.assertIn("directly above", refused)
 
@@ -349,7 +349,7 @@ class DittoTests(TempDatabase):
         self.record(0, commissioning_date="明四三、一二、二六")
         result = self.record(2, commissioning_date="同")   # row 1 never recorded
         self.assertIsNone(result["commissioning_date"])
-        self.assertIsNone(result["inherited"])
+        self.assertEqual(result["inherited"], {})
 
     def test_a_corrected_row_above_lets_the_ditto_resolve(self):
         """Re-reading the row above supersedes; the ditto then has a source."""
@@ -359,20 +359,97 @@ class DittoTests(TempDatabase):
         self.record(1, commissioning_date="明四三、一二、二七")       # corrected
         result = self.record(2, commissioning_date="同")
         self.assertEqual(result["commissioning_date"], "1910-12-27")
-        self.assertEqual(result["inherited"]["from_row"], 1)
+        self.assertEqual(result["inherited"]["commissioning_date"]["from_row"], 1)
 
     def test_a_ditto_with_nothing_above_it_is_refused(self):
         """Never fill it in from somewhere convenient."""
         result = self.record(0, name_raw="first on the page", commissioning_date="同")
         self.assertIsNone(result["commissioning_date"])
-        self.assertIsNone(result["inherited"])
+        self.assertEqual(result["inherited"], {})
         self.assertIn("ditto", result["flagged"]["commissioning_date"]["refused"])
 
     def test_a_real_date_is_untouched_by_any_of_this(self):
         self.record(0, commissioning_date="明四三、一二、二六")
         result = self.record(1, commissioning_date="大九、一二、二一")
         self.assertEqual(result["commissioning_date"], "1920-12-21")
-        self.assertIsNone(result["inherited"])
+        self.assertEqual(result["inherited"], {})
+
+
+class DittoAnyColumnTests(TempDatabase):
+    """Every column on these rosters can be dittoed, not just the date."""
+
+    def setUp(self):
+        super().setUp()
+        import api
+        from api import ObservationIn
+        self.api, self.ObservationIn = api, ObservationIn
+        db.upsert_cells(self.page_id,
+                        [{"index": i, "bbox": [1, 2, 3, 4]} for i in range(10)],
+                        self.user_id)
+        with db.session() as conn:
+            conn.execute("INSERT INTO branch_vocab (branch_code, label_ja) "
+                         "VALUES ('hohei','歩兵')")
+
+    def record(self, row_index, **body):
+        return self.api.create_observation(
+            "test-pid", 1, self.ObservationIn(row_index=row_index, **body),
+            {"user_id": self.user_id})
+
+    def test_rank_branch_and_post_all_inherit(self):
+        self.record(0, name_raw="平岩棟一", rank_code="taisa", branch_code="hohei",
+                    post="歩兵第七十聯隊附", commissioning_date="明四三、一二、二六")
+        result = self.record(1, name_raw="乾忠夫",
+                             ditto=["rank_code", "branch_code", "post",
+                                    "commissioning_date"])
+        with db.read_session() as cur:
+            cur.execute("SELECT o.rank_code, o.branch_code, o.post, o.commissioning_date "
+                        "FROM observation o JOIN roster_cell c ON c.cell_id=o.cell_id "
+                        "WHERE c.row_index=1 ORDER BY o.rowid DESC LIMIT 1")
+            row = dict(cur.fetchone())
+        self.assertEqual(row, {"rank_code": "taisa", "branch_code": "hohei",
+                               "post": "歩兵第七十聯隊附",
+                               "commissioning_date": "1910-12-26"})
+        self.assertEqual(set(result["inherited"]), {"rank_code", "branch_code",
+                                                    "post", "commissioning_date"})
+        self.assertEqual(result["flagged"], {})
+
+    def test_the_name_is_kept_while_the_rest_is_dittoed(self):
+        """The reader still reads the one cell the page actually states."""
+        self.record(0, name_raw="平岩棟一", rank_code="taisa")
+        self.record(1, name_raw="乾忠夫", ditto=["rank_code"])
+        with db.read_session() as cur:
+            cur.execute("SELECT o.name_raw, o.rank_code FROM observation o "
+                        "JOIN roster_cell c ON c.cell_id=o.cell_id "
+                        "WHERE c.row_index=1 ORDER BY o.rowid DESC LIMIT 1")
+            row = dict(cur.fetchone())
+        self.assertEqual(row, {"name_raw": "乾忠夫", "rank_code": "taisa"})
+
+    def test_a_column_empty_above_is_refused_not_reached_past(self):
+        self.record(0, name_raw="has no post recorded", rank_code="taisa")
+        result = self.record(1, name_raw="x", ditto=["post"])
+        self.assertIn("post", result["flagged"])
+        self.assertNotIn("post", result["inherited"])
+        self.assertIn("directly above", result["flagged"]["post"]["refused"])
+
+    def test_each_dittoed_column_is_judged_on_its_own(self):
+        """One column failing must not take the others down with it."""
+        self.record(0, rank_code="taisa")          # rank yes, post no
+        result = self.record(1, ditto=["rank_code", "post"])
+        self.assertIn("rank_code", result["inherited"])
+        self.assertIn("post", result["flagged"])
+
+    def test_a_ditto_chain_walks_down_the_column(self):
+        self.record(0, rank_code="taisa")
+        self.record(1, ditto=["rank_code"])
+        result = self.record(2, ditto=["rank_code"])
+        self.assertEqual(result["inherited"]["rank_code"]["from_row"], 1)
+
+    def test_an_unknown_column_name_is_ignored(self):
+        """The list names columns; anything else is not silently obeyed."""
+        self.record(0, rank_code="taisa")
+        result = self.record(1, name_raw="x", ditto=["author_user_id", "status"])
+        self.assertEqual(result["inherited"], {})
+        self.assertEqual(result["status"], "draft")
 
 
 class DateNormalisationTests(unittest.TestCase):

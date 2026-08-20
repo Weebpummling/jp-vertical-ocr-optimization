@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Cell, Vocab, VocabEntry } from "../api";
 import { resolveVocab, suggestVocab } from "../api";
-import { GETA, type SaveState, type Values } from "../observation";
+import { DITTO, GETA, type SaveState, type Values } from "../observation";
 import { DifficultCharacter } from "./DifficultCharacter";
 
 export interface FieldSpec {
@@ -149,6 +149,11 @@ export function EntryForm({
     // The IME owns these keys while it is converting. Never pre-empt it.
     if (composing.current || e.nativeEvent.isComposing) return;
 
+    if (e.altKey && (e.key === "d" || e.key === "D")) {
+      e.preventDefault();      // this cell is 同 - same as the entry above
+      onChange(spec.key, DITTO);
+      return;
+    }
     if (e.altKey && (e.key === "g" || e.key === "G")) {
       e.preventDefault();      // a character that cannot be read
       insertGeta(spec.key);
@@ -282,6 +287,7 @@ export function EntryForm({
                   vocab={vocab}
                   onChange={(next) => onChange(spec.key, next)}
                   onGeta={() => insertGeta(spec.key)}
+                  onDitto={() => onChange(spec.key, DITTO)}
                 />
               )}
 
@@ -346,12 +352,18 @@ export function EntryForm({
             separate act
           </p>
         )}
-        {saveState?.inherited && (
-          <p className="save__inherited">
-            任官年月日 <b>{saveState.inherited.raw}</b> — took{" "}
-            <b>{saveState.inherited.value}</b> from officer{" "}
-            {saveState.inherited.from_row + 1}. Check that is the row it points at.
-          </p>
+        {saveState?.inherited && Object.keys(saveState.inherited).length > 0 && (
+          <div className="save__inherited">
+            <p>Taken from the officer above — check that is the right row:</p>
+            <ul>
+              {Object.entries(saveState.inherited).map(([column, from]) => (
+                <li key={column}>
+                  <code>{column}</code> <b>{from.value}</b>{" "}
+                  <span className="muted">from officer {from.from_row + 1}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {saveState?.state === "error" && (
           <p className="save__err">not recorded: {saveState.message}</p>
