@@ -235,6 +235,40 @@ class NameBirthDateTests(unittest.TestCase):
         self.assertEqual(p.method, "refused")
 
 
+class NameOriginAndBirthPieceTests(unittest.TestCase):
+    """1935 prints 本籍・族籍 above the name, and NDL boxes birth dates in pieces."""
+
+    def cell(self, lines):
+        cells, _ = binning.bin_page(lines, cells_for(1, FIELDS))
+        return cells[(0, "name_raw")], binning.propose(cells, 1, FIELDS)[0].fields["name_raw"]
+
+    def test_the_home_prefecture_and_class_are_not_part_of_the_name(self):
+        """Officer 0 of pid 1449474 frame 100 came back as 和歌山、士土橋-正."""
+        cell, p = self.cell(RubyTests.NAME + [BoxedLine("和歌山、士", 72, 105, 92, 150)])
+        self.assertEqual(p.value, "上住良吉")
+        self.assertEqual([l.text for l in cell.origin], ["和歌山、士"])
+
+    def test_a_surname_that_is_a_prefecture_name_stays_the_name(self):
+        cell, p = self.cell([BoxedLine("山口", 55, 105, 95, 140), BoxedLine("毅", 55, 150, 95, 185)])
+        self.assertEqual(p.value, "山口毅")
+        self.assertEqual(cell.origin, ())
+
+    def test_the_pieces_of_a_birth_date_stay_with_it(self):
+        cell, p = self.cell(RubyTests.NAME + [BoxedLine("明二二、", 10, 105, 22, 150),
+                                              BoxedLine("七、一六", 10, 152, 22, 195)])
+        self.assertEqual(p.value, "上住良吉")
+        self.assertEqual("".join(l.text for l in cell.aside), "明二二、七、一六")
+
+    def test_a_numeral_in_the_name_is_not_taken_for_a_birth_date_piece(self):
+        cell, p = self.cell([BoxedLine("三", 55, 105, 95, 135), BoxedLine("郞", 55, 137, 95, 167),
+                             BoxedLine("明二二、七、一六", 10, 105, 22, 195)])
+        self.assertEqual(p.value, "三郞")
+
+    def test_numerals_without_a_birth_date_are_left_in_the_cell(self):
+        cell, _ = self.cell(RubyTests.NAME + [BoxedLine("七、一六", 10, 152, 22, 195)])
+        self.assertEqual(cell.aside, ())
+
+
 class RubyWithSpacesTests(unittest.TestCase):
     def test_furigana_read_with_a_space_in_it_is_still_furigana(self):
         cells, _ = binning.bin_page(RubyTests.NAME + [BoxedLine("ウヘ ズミ", 52, 108, 64, 160)],

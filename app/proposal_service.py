@@ -200,6 +200,18 @@ def column_kind(fields: dict[str, dict], vocab: dict) -> dict:
     return {"kind": "officer"}
 
 
+def birth_as_read(cell) -> str:
+    """Everything read beside a name, top to bottom: the birth date set aside by
+    what it says, and any other small-type column left in the cell. Both, because
+    NDL boxes some dates in pieces a rule cannot all recognise (ニ for 二), and
+    showing only one of the two dropped the other half of the date."""
+    if not cell.runs and not cell.aside:
+        return ""
+    main = max(cell.runs, key=lambda r: r.thickness) if cell.runs else None
+    lines = list(cell.aside) + [l for r in cell.runs if r is not main for l in r.lines]
+    return "".join(l.text for l in sorted(lines, key=lambda l: l.ymin))
+
+
 def propose_registered(page: ps.RegisteredPage,
                        lines: list[ndl_lines.BoxedLine],
                        vocab: dict | None = None) -> dict:
@@ -233,8 +245,9 @@ def propose_registered(page: ps.RegisteredPage,
             "index": officer.index,
             "panel": officer.panel,
             "column": officer.column,
-            "birth_raw": (name_cell.secondary or "".join(
-                l.text for l in sorted(name_cell.aside, key=lambda l: l.ymin)))
+            "birth_raw": birth_as_read(name_cell) if name_cell else "",
+            # 本籍・族籍 printed above the name (1935 edition), set aside from it.
+            "origin_raw": "".join(l.text for l in sorted(name_cell.origin, key=lambda l: l.ymin))
             if name_cell else "",
             "column_kind": column_kind(entries, vocab),
             "fields": entries,

@@ -63,6 +63,27 @@ POSTING_DATE = re.compile(r"^[〇一二三四五六七八九十、・，,]+$")
 # officers of frame 101 (明二一、九、二〇 given as officer 12's name).
 BIRTH_DATE_FIELDS = ("name_raw",)
 BIRTH_DATE = re.compile(r"^[明大昭][〇一二三四五六七八九十、・，,]+$")
+# NDL boxes a birth date in pieces on some editions (1935: 明二二、 then 七、一六),
+# so the tail is only numerals. Set aside only beside a birth date already found,
+# in its sub-column and in its small type - a name's 三 or 一 is set full width.
+BIRTH_DATE_PIECE = re.compile(r"^[〇○一二三四五六七八九十、・，,]+$")
+SMALL_TYPE = 0.8
+
+# The 1935 edition prints the officer's home prefecture and class (本籍・族籍:
+# 和歌山、士) in small type above the name, and it was proposed as part of the
+# name (和歌山、士土橋-正). Set aside only a line that says exactly that - a
+# prefecture, optionally 士/平/華 - in small type, so a surname such as 山口, set
+# full width, is never taken for one.
+ORIGIN_FIELDS = ("name_raw",)
+PREFECTURES = (
+    "北海道", "青森", "岩手", "宮城", "秋田", "山形", "福島", "茨城", "栃木", "群馬",
+    "埼玉", "千葉", "東京", "神奈川", "新潟", "富山", "石川", "福井", "山梨", "長野",
+    "岐阜", "靜岡", "静岡", "愛知", "三重", "滋賀", "京都", "大阪", "兵庫", "奈良",
+    "和歌山", "鳥取", "島根", "岡山", "廣島", "広島", "山口", "德島", "徳島", "香川",
+    "愛媛", "高知", "福岡", "佐賀", "長崎", "熊本", "大分", "宮崎", "鹿兒島", "鹿児島",
+    "沖繩", "沖縄", "樺太")
+# Either a class (士/平/華) or a degree (醫博 ...) can follow the prefecture.
+ORIGIN = re.compile("^(" + "|".join(PREFECTURES) + ")[、・，,]?([士平華]|[醫工理農獸藥法文]博)?$")
 
 
 @dataclass(frozen=True)
@@ -89,6 +110,8 @@ class Cell:
     # Small type set aside from the reading for the same reason - the posting
     # date at the foot of a post.
     aside: tuple[BoxedLine, ...] = ()
+    # Home prefecture and class printed above a name (本籍・族籍), set aside.
+    origin: tuple[BoxedLine, ...] = ()
 
     @property
     def text(self) -> str:
@@ -217,7 +240,28 @@ def _split_birth_date(lines: list[BoxedLine]) -> tuple[list[BoxedLine], tuple[Bo
     birth = tuple(l for l in lines if BIRTH_DATE.match("".join(l.text.split())))
     if len(birth) == len(lines):
         return lines, ()
+    if birth:
+        thickest = max(l.thickness for l in lines)
+        pieces = tuple(
+            l for l in lines
+            if l not in birth
+            and BIRTH_DATE_PIECE.match("".join(l.text.split()))
+            and l.thickness < SMALL_TYPE * thickest
+            and any(_x_overlap(l, b) >= SAME_RUN for b in birth))
+        birth = birth + pieces
     return [l for l in lines if l not in birth], birth
+
+
+def _split_origin(lines: list[BoxedLine]) -> tuple[list[BoxedLine], tuple[BoxedLine, ...]]:
+    """Separate the home prefecture and class (本籍・族籍) from a name cell's lines:
+    says exactly that, AND is set in small type beside the name."""
+    if len(lines) < 2:
+        return lines, ()
+    thickest = max(l.thickness for l in lines)
+    origin = tuple(l for l in lines
+                   if ORIGIN.match("".join(l.text.split()))
+                   and l.thickness < SMALL_TYPE * thickest)
+    return [l for l in lines if l not in origin], origin
 
 
 def cell_from_lines(column: int, name: str, bbox, lines, suspect: bool = False) -> Cell:
@@ -230,13 +274,16 @@ def cell_from_lines(column: int, name: str, bbox, lines, suspect: bool = False) 
     lines = list(lines)
     ruby: tuple[BoxedLine, ...] = ()
     aside: tuple[BoxedLine, ...] = ()
+    origin: tuple[BoxedLine, ...] = ()
     if name in RUBY_FIELDS:
         lines, ruby = _split_ruby(lines)
+    if name in ORIGIN_FIELDS:
+        lines, origin = _split_origin(lines)
     if name in POSTING_DATE_FIELDS:
         lines, aside = _split_posting_date(lines)
     if name in BIRTH_DATE_FIELDS:
         lines, aside = _split_birth_date(lines)
-    return Cell(column, name, bbox, _runs(lines), suspect, ruby, aside)
+    return Cell(column, name, bbox, _runs(lines), suspect, ruby, aside, origin)
 
 
 def bin_page(lines: list[BoxedLine], cells_iter,
