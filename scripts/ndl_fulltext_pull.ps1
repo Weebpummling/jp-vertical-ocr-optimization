@@ -118,7 +118,14 @@ foreach ($e in ($fulltext.list | Sort-Object page)) {
         if (-not [string]::IsNullOrWhiteSpace($e.contents)) { [void]$fb.AppendLine($e.contents) }
         else { [void]$fb.AppendLine('(no OCR text on this frame)') }
     } else {
-        foreach ($ln in ($e.coordjson | ConvertFrom-Json)) { [void]$fb.AppendLine($ln.contenttext) }
+        # NDL repeats some coordjson entries verbatim (same text, same box), and
+        # joining them doubles that text. Dropped here exactly as reading/ndl_lines.py
+        # and ndl-workbench's reflow.dedupe drop them, so the tools still agree.
+        $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+        foreach ($ln in ($e.coordjson | ConvertFrom-Json)) {
+            $key = "$($ln.contenttext)|$($ln.xmin)|$($ln.ymin)|$($ln.xmax)|$($ln.ymax)"
+            if ($seen.Add($key)) { [void]$fb.AppendLine($ln.contenttext) }
+        }
     }
     [void]$fb.AppendLine('')
     $frameBlocks += $fb.ToString()
