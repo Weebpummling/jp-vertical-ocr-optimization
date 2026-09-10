@@ -63,6 +63,12 @@ FORM_FIELDS = {
 # them however plausible its raw text looks: blank beats plausible.
 CONFIDENT = ("ndl-ocr", "digits", "eradate", "inherited")
 
+# Words of the roster's own column legend (次列, 氏名, 出身期別 ...). A column
+# carrying two of them is the legend printed where a section begins.
+LEGEND_WORDS = ("次列", "氏名", "期別", "出身", "命課", "現任官", "前官", "初任", "位勳功")
+# Bands a section label is printed across - never the post, which an officer has.
+LABEL_BANDS = ("service_in_rank", "rank_date", "prev_rank_date", "commissioning_date")
+
 # A parsed volume is ~35 MB of JSON. Keep the two most recent in memory - the
 # volume being worked and the one it was compared against - and no more.
 _MAX_DOCS = 2
@@ -155,9 +161,50 @@ def takes_wholesale(proposal: binning.Proposal) -> bool:
     return proposal.method in CONFIDENT or _is_ditto_mark(proposal.raw)
 
 
+def column_kind(fields: dict[str, dict], vocab: dict) -> dict:
+    """What a column of the grid appears to hold - a proposal, never a decision.
+
+    Registration places every column the rulings define, and not every column is
+    an officer. On pid 1449426 frames 95-108 the last column of the left leaf is
+    the section label (步兵中佐 and a count); a section starting mid-spread opens
+    with a column of headings (次列, 氏名, 出身期別, frame 105); a section's end
+    leaves unused slots (frame 104). Counted as officers, they kept every such page
+    from ever reading complete.
+
+    Narrow on purpose. Only a column whose seniority cell has no digits is
+    considered - an officer always has a seniority number - and a section label
+    must be read in the date bands with nothing in the post, so an officer whose
+    number simply did not read is not taken for a heading. A reader confirms by
+    marking the row (roster_cell.audit_status = 'extra_row'), or ignores it.
+    """
+    texts = {name: "".join((e.get("raw") or "").split()) for name, e in fields.items()}
+    if any(ch.isdigit() for ch in texts.get("seniority_no", "")):
+        return {"kind": "officer"}
+    joined = "".join(texts.values())
+    if not joined:
+        return {"kind": "blank", "evidence": "nothing read in any band"}
+    legend = [w for w in LEGEND_WORDS if w in joined]
+    if len(legend) >= 2:
+        return {"kind": "legend", "evidence": "column headings read: " + "、".join(legend)}
+    if not texts.get("post"):
+        in_bands = "".join(texts.get(b, "") for b in LABEL_BANDS).replace("、", "")
+        labels = []
+        for group in ("branches", "ranks"):
+            for entry in vocab.get(group, []):
+                for label in [entry.get("ja")] + list(entry.get("variants") or []):
+                    if label and label in in_bands and label not in labels:
+                        labels.append(label)
+        if labels:
+            return {"kind": "section_label",
+                    "evidence": "section label read: " + "、".join(labels)}
+    return {"kind": "officer"}
+
+
 def propose_registered(page: ps.RegisteredPage,
-                       lines: list[ndl_lines.BoxedLine]) -> dict:
+                       lines: list[ndl_lines.BoxedLine],
+                       vocab: dict | None = None) -> dict:
     """Proposals for an already-registered scan. Pure: no disk, no network."""
+    vocab = vocab if vocab is not None else ps.vocabularies()
     spec = [(o.index, c.field, tuple(c.bbox), c.suspect)
             for o in page.officers for c in o.cells]
     fields = [c.field for c in page.officers[0].cells] if page.officers else []
@@ -189,6 +236,7 @@ def propose_registered(page: ps.RegisteredPage,
             "birth_raw": (name_cell.secondary or "".join(
                 l.text for l in sorted(name_cell.aside, key=lambda l: l.ymin)))
             if name_cell else "",
+            "column_kind": column_kind(entries, vocab),
             "fields": entries,
         })
     return {"officers": officers, "lines_outside": [l.text for l in outside]}

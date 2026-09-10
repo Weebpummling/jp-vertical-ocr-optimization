@@ -213,8 +213,12 @@ def survey_frame(pid: str, frame: int, *, fetch: bool = False) -> dict:
     return entry
 
 
-def page_status(entry: dict | None, rows_read: int) -> dict:
-    """One frame's completeness, from its survey entry and its recorded rows."""
+def page_status(entry: dict | None, rows_read: int, not_officers: int = 0) -> dict:
+    """One frame's completeness, from its survey entry and its recorded rows.
+
+    `not_officers` are columns a reader marked as holding no officer (a section
+    label, the column legend, an unused slot); they do not count toward the page.
+    """
     if entry is None:
         return {"status": "in_progress" if rows_read else "unsurveyed",
                 "officers": None, "rows_read": rows_read,
@@ -223,7 +227,7 @@ def page_status(entry: dict | None, rows_read: int) -> dict:
         return {"status": "not_roster", "officers": 0, "rows_read": rows_read,
                 "leaf_missing": False, "needs_review": False,
                 "reason": entry.get("reason")}
-    officers = int(entry.get("officers") or 0)
+    officers = max(int(entry.get("officers") or 0) - not_officers, 0)
     missing = bool(entry.get("panels_missing"))
     if rows_read == 0:
         status = "not_started"
@@ -234,7 +238,7 @@ def page_status(entry: dict | None, rows_read: int) -> dict:
     else:
         status = "complete"
     return {"status": status, "officers": officers, "rows_read": rows_read,
-            "leaf_missing": missing,
+            "not_officers": not_officers, "leaf_missing": missing,
             "needs_review": bool(entry.get("needs_review"))}
 
 
@@ -242,13 +246,15 @@ def page_statuses(pid: str) -> dict:
     """Every registered frame of a volume with its completeness."""
     frames = db.volume_frames(pid)
     progress = {f["frame_no"]: f for f in db.volume_progress(pid)}
+    marked = db.extra_rows_by_frame(pid)
     survey = load_survey(pid)
     cached = cached_frames(pid)
     pages = []
     counts: Counter = Counter()
     for frame in frames:
         read = progress.get(frame, {})
-        status = page_status(survey.get(frame), int(read.get("rows_read") or 0))
+        status = page_status(survey.get(frame), int(read.get("rows_read") or 0),
+                             marked.get(frame, 0))
         status.update({"frame": frame, "cached": frame in cached,
                        "last_touched": read.get("last_touched")})
         counts[status["status"]] += 1

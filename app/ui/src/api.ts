@@ -220,6 +220,18 @@ export const createCells = (pid: string, frame: number) =>
     { method: "POST" },
   );
 
+/** Mark a column of the grid not an officer ("extra_row"), or undo it ("ok"). */
+export const setRowAudit = (
+  pid: string,
+  frame: number,
+  index: number,
+  status: "ok" | "extra_row",
+) =>
+  send<{ row_index: number; audit_status: string }>(
+    `/volumes/${encodeURIComponent(pid)}/pages/${frame}/rows/${index}/audit`,
+    { method: "POST", body: { status } },
+  );
+
 export const saveObservation = (pid: string, frame: number, body: ObservationIn) =>
   send<SavedObservation>(
     `/volumes/${encodeURIComponent(pid)}/pages/${frame}/observations`,
@@ -227,7 +239,7 @@ export const saveObservation = (pid: string, frame: number, body: ObservationIn)
   );
 
 export const fetchObservations = (pid: string, frame: number) =>
-  get<{ page_id: string; observations: PageObservation[] }>(
+  get<{ page_id: string; observations: PageObservation[]; row_audit?: Record<string, string> }>(
     `/volumes/${encodeURIComponent(pid)}/pages/${frame}/observations`,
   );
 
@@ -333,6 +345,8 @@ export interface OfficerProposals {
   column: number;
   /** The small-type birth date read beside the name. */
   birth_raw: string;
+  /** What the column appears to hold. Anything but "officer" is a proposal to mark it. */
+  column_kind?: { kind: "officer" | "section_label" | "legend" | "blank"; evidence?: string };
   fields: Record<string, FieldProposal>;
 }
 

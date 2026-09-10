@@ -93,6 +93,17 @@ class RowTests(unittest.TestCase):
         self.assertTrue(any("序列 916" in c for c in rows[0].checks))
         self.assertIn("ndlocr-lite/agrees", [o["method"] for o in rows[0].ocr])
 
+    def test_a_column_marked_not_an_officer_is_left_out(self):
+        page = spread((2, 1))
+        proposals = props.propose_registered(page, [at(0, "seniority_no", "915")])
+        rows = W.officer_rows(pid="p", frame=1, as_of=None, page=page, proposals=proposals,
+                              observations=[], vocab=VOCAB, row_audit={2: "extra_row"})
+        self.assertEqual([r.key for r in rows], ["p:1:0", "p:1:1"])
+
+    def test_a_column_that_looks_like_no_officer_says_so(self):
+        _, rows = build([])
+        self.assertTrue(any("unused slot" in c for c in rows[0].checks))
+
     def test_no_machine_reading_is_said_out_loud(self):
         _, rows = build([], proposals={"available": False, "reason": "OCR not cached",
                                        "officers": []})

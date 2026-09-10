@@ -51,6 +51,12 @@ export const FIELDS: FieldSpec[] = [
   { key: "notes", label: "備考", cell: null },
 ];
 
+const KIND_TEXT: Record<string, string> = {
+  section_label: "a section label",
+  legend: "the column legend",
+  blank: "an unused slot",
+};
+
 export type { Values };
 
 /** What a field could take in place: NDL's reading, and the zoomed re-reading. */
@@ -66,6 +72,10 @@ export interface OfficerState {
   failed: boolean;
   /** The two machine readings disagree somewhere on this officer. */
   differs: boolean;
+  /** A reader marked this column as holding no officer. */
+  marked: boolean;
+  /** The machine reads this column as holding no officer. */
+  suggested: { kind: string; evidence?: string } | null;
 }
 
 interface Props {
@@ -96,6 +106,10 @@ interface Props {
   pageComplete: boolean;
   nextPageLabel: string | null;
   onNextPage: () => void;
+  /** This column is marked as holding no officer. */
+  marked: boolean;
+  columnKind: { kind: string; evidence?: string } | null;
+  onMark: (notOfficer: boolean) => void;
 }
 
 export function EntryForm({
@@ -120,6 +134,9 @@ export function EntryForm({
   pageComplete,
   nextPageLabel,
   onNextPage,
+  marked,
+  columnKind,
+  onMark,
 }: Props) {
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const composing = useRef(false);
@@ -345,6 +362,8 @@ export function EntryForm({
                     state.recorded ? "strip__o--done" : "",
                     state.typed ? "strip__o--typed" : "",
                     state.failed ? "strip__o--failed" : "",
+                    state.marked ? "strip__o--marked" : "",
+                    state.suggested ? "strip__o--suggested" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -355,6 +374,11 @@ export function EntryForm({
                     `Officer ${i + 1}` +
                     (state.recorded ? " · recorded" : state.typed ? " · typed, not recorded" : "") +
                     (state.failed ? " · last save failed" : "") +
+                    (state.marked
+                      ? " · marked not an officer"
+                      : state.suggested
+                        ? ` · looks like ${KIND_TEXT[state.suggested.kind] ?? state.suggested.kind}`
+                        : "") +
                     (state.differs ? " · the two machine readings differ" : "")
                   }
                 >
@@ -365,6 +389,26 @@ export function EntryForm({
             ))}
           </ol>
         )}
+        {marked ? (
+          <p className="notofficer">
+            <span>
+              Marked <strong>not an officer</strong> — it no longer counts toward this page.
+            </span>
+            <button type="button" className="linkish" onClick={() => onMark(false)}>
+              undo
+            </button>
+          </p>
+        ) : columnKind && columnKind.kind !== "officer" ? (
+          <p className="notofficer">
+            <span>
+              This column looks like {KIND_TEXT[columnKind.kind] ?? columnKind.kind}
+              {columnKind.evidence ? ` (${columnKind.evidence})` : ""}.
+            </span>
+            <button type="button" onClick={() => onMark(true)}>
+              not an officer <kbd>Alt</kbd>+<kbd>X</kbd>
+            </button>
+          </p>
+        ) : null}
         <p className="keys">
           <kbd>Alt</kbd>+<kbd>Enter</kbd> take reading &amp; next ·{" "}
           <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd> take NDL / zoom · <kbd>Enter</kbd> next

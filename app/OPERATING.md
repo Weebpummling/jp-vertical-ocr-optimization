@@ -231,6 +231,21 @@ nothing reaches the form until you take it.
 Taking a proposal is typing it. You are still the one reading the page, and the
 officer is recorded under your id code only when you record them.
 
+### A column that is not an officer
+
+Not every column of the grid holds an officer. The last column of a left-hand
+page is often the **section label** (步兵中佐 and a number); a section that starts
+mid-page opens with a column of **headings** (次列, 氏名, 出身期別); and the end of a
+section can leave **unused slots**.
+
+When the machine reads a column that way, its number in the strip is hatched and
+the form says so. If you agree, press **not an officer** (<kbd>Alt</kbd>+<kbd>X</kbd>)
+— it stops counting toward the page, and you move on to the next officer. **mark N
+columns not an officer** on the page line does all of the suggested ones at once.
+It is recorded to you and can be undone. If the machine is wrong — it only ever
+suggests, and a column with any seniority number is never suggested — just read
+the officer as usual.
+
 ### Fewer clicks
 
 - **Under every field** sit the machine readings for it: **NDL** and, where the

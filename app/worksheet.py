@@ -110,6 +110,8 @@ FIELD_JA = {
     "prev_rank_date": "前階級任官", "service_in_rank": "実役停年",
     "court_rank_decorations": "位階勲等", "notes": "備考",
 }
+KIND_TEXT = {"section_label": "a section label", "legend": "the column legend",
+             "blank": "an unused slot"}
 TEMPLATE_FIELDS = ("seniority_no", "name_raw", "cohort", "post",
                    "commissioning_date", "rank_date", "prev_rank_date",
                    "service_in_rank", "court_rank_decorations")
@@ -280,7 +282,8 @@ def officer_rows(*, pid: str, frame: int, as_of: str | None,
                  observations: list[dict], vocab: dict | None,
                  image_services: dict[int, str] | None = None,
                  base_url: str = DEFAULT_BASE_URL,
-                 rereads: dict[str, dict] | None = None) -> list[OfficerRow]:
+                 rereads: dict[str, dict] | None = None,
+                 row_audit: dict[int, str] | None = None) -> list[OfficerRow]:
     """Every officer on one registered scan, merged from record and machine.
 
     A person's reading wins where there is one; the machine fills the rest, and
@@ -303,6 +306,8 @@ def officer_rows(*, pid: str, frame: int, as_of: str | None,
 
     rows = []
     for officer in page.officers:
+        if (row_audit or {}).get(officer.index) == "extra_row":
+            continue                    # a reader marked this column not an officer
         prop = by_index.get(officer.index, {})
         fields = prop.get("fields", {})
         cells: dict[str, OutCell] = {}
@@ -349,6 +354,11 @@ def officer_rows(*, pid: str, frame: int, as_of: str | None,
                 differing.append(f"{FIELD_JA.get(name, name)} {rerun.get('fill')}")
         if differing:
             checks.append("NDLOCR-Lite, zoomed in, reads differently: " + "、".join(differing))
+        kind = prop.get("column_kind") or {}
+        if kind.get("kind") not in (None, "officer"):
+            checks.append(f"looks like {KIND_TEXT.get(kind['kind'], kind['kind'])} "
+                          f"({kind.get('evidence', '')}) - mark it not an officer in "
+                          f"the workstation")
         if unavailable:
             checks.append("no machine reading: " + unavailable)
 
@@ -368,9 +378,11 @@ def officer_rows(*, pid: str, frame: int, as_of: str | None,
 
 
 def page_summary(frame: int, page: ps.RegisteredPage, proposals: dict | None,
-                 observations: list[dict]) -> PageSummary:
+                 observations: list[dict],
+                 row_audit: dict[int, str] | None = None) -> PageSummary:
     recorded = len({o["row_index"] for o in observations})
-    status = vs.page_status(vs.entry_for_page(page), recorded)["status"]
+    marked = sum(1 for s in (row_audit or {}).values() if s == "extra_row")
+    status = vs.page_status(vs.entry_for_page(page), recorded, marked)["status"]
     available = bool(proposals) and proposals.get("available", True)
     if not available:
         note = "no machine reading: " + ((proposals or {}).get("reason")
@@ -378,7 +390,7 @@ def page_summary(frame: int, page: ps.RegisteredPage, proposals: dict | None,
     else:
         note = proposals.get("ocr_note") or ""
     return PageSummary(
-        frame=frame, status=status, officers=len(page.officers), recorded=recorded,
+        frame=frame, status=status, officers=len(page.officers) - marked, recorded=recorded,
         leaves=f"{len(page.panels_registered)}/{page.panels_total}",
         leaf_missing=bool(page.panels_missing), needs_review=page.needs_review,
         lines_outside=len(proposals.get("lines_outside") or []) if available else None,
@@ -844,12 +856,14 @@ def export(pid: str, frames: list[int], *, images: bool = False, fetch: bool = F
             rereads = cell_ocr.load_results(pid, frame)
         except Exception:
             rereads = {}
+        row_audit = db.row_audit(registered["page_id"]) if registered else {}
         page_rows = officer_rows(pid=pid, frame=frame, as_of=as_of, page=page,
                                  proposals=proposals, observations=observations,
                                  vocab=vocab, image_services=services,
-                                 base_url=base_url, rereads=rereads)
+                                 base_url=base_url, rereads=rereads,
+                                 row_audit=row_audit)
         rows.extend(page_rows)
-        pages.append(page_summary(frame, page, proposals, observations))
+        pages.append(page_summary(frame, page, proposals, observations, row_audit))
         if images:
             crops.update(_name_crops(path, page_rows))
         log(f"frame {frame}: {len(page.officers)} officers"

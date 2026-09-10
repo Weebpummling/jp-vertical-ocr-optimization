@@ -437,7 +437,36 @@ def list_observations(pid: str, frame: int) -> dict:
     # Everything is already a string: SQLite stores dates and timestamps as
     # ISO-8601 text, so there is nothing to serialize on the way out.
     rows = db.observations_for_page(page["page_id"])
-    return {"page_id": str(page["page_id"]), "observations": rows}
+    return {"page_id": str(page["page_id"]), "observations": rows,
+            "row_audit": db.row_audit(page["page_id"])}
+
+
+class RowAuditIn(BaseModel):
+    status: str = Field(pattern="^(ok|extra_row)$")
+
+
+@app.post("/volumes/{pid}/pages/{frame}/rows/{index}/audit")
+def mark_row(pid: str, frame: int, index: int, body: RowAuditIn,
+             user: dict = Depends(current_user)) -> dict:
+    """Mark a column of the grid not an officer - or undo it.
+
+    A section label, the column legend or an unused slot is a column the rulings
+    define and no officer occupies. Marked, it stops counting toward the page, so
+    the page can be finished. Attributed, reversible, and a flag raised by
+    validation is left standing.
+    """
+    page = _require_page(pid, frame)
+    mark = lambda: db.set_row_audit(page["page_id"], index, body.status, user["user_id"],  # noqa: E731
+                                    volume_pid=pid, frame_no=frame)
+    try:
+        status = mark()
+    except LookupError:
+        create_cells(pid, frame, user)      # the row must exist to carry the mark
+        try:
+            status = mark()
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"row_index": index, "audit_status": status}
 
 
 @app.get("/volumes/{pid}/progress")

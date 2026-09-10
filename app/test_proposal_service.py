@@ -129,5 +129,43 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(got["lines_outside"], ["步兵大佐"])
 
 
+VOCAB = {"branches": [{"ja": "歩兵", "variants": ["步兵"]}],
+         "ranks": [{"ja": "中佐", "variants": []}]}
+
+
+class ColumnKindTests(unittest.TestCase):
+    """A column of the grid that holds no officer, proposed from what was read."""
+
+    def kind(self, lines):
+        got = props.propose_registered(spread((1,)), lines, vocab=VOCAB)
+        return got["officers"][0]["column_kind"]
+
+    def test_an_officer_has_a_seniority_number(self):
+        k = self.kind([at(0, "seniority_no", "915", total=1),
+                       at(0, "post", "步兵第九聯隊附", total=1)])
+        self.assertEqual(k["kind"], "officer")
+
+    def test_the_section_label_column(self):
+        k = self.kind([at(0, "commissioning_date", "步兵中佐", total=1),
+                       at(0, "name_raw", "一六七", total=1)])
+        self.assertEqual(k["kind"], "section_label")
+        self.assertIn("步兵", k["evidence"])
+
+    def test_the_column_legend(self):
+        k = self.kind([at(0, "seniority_no", "次列", total=1),
+                       at(0, "name_raw", "學位爵氏名", total=1),
+                       at(0, "post", "職名命課ノ年月日", total=1)])
+        self.assertEqual(k["kind"], "legend")
+
+    def test_an_unused_slot(self):
+        self.assertEqual(self.kind([])["kind"], "blank")
+
+    def test_an_officer_whose_number_did_not_read_is_not_taken_for_a_label(self):
+        k = self.kind([at(0, "seniority_no", "九一五", total=1),
+                       at(0, "post", "步兵第九聯隊附", total=1),
+                       at(0, "commissioning_date", "步兵", total=1)])
+        self.assertEqual(k["kind"], "officer")
+
+
 if __name__ == "__main__":
     unittest.main()

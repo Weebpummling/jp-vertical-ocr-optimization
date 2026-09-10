@@ -24,6 +24,7 @@ import {
   fetchCellOcr,
   rereadCell,
   startCellOcr,
+  setRowAudit,
   type PageObservation,
   type PageProposals,
   type CellOcrStatus,
@@ -138,6 +139,9 @@ export default function App() {
   >({});
   // Bumped to hand the keyboard back to the form after a take from the pane.
   const [focusTick, setFocusTick] = useState(0);
+  // Rows of this page with an audit status - "extra_row" is a column a reader
+  // marked as holding no officer.
+  const [rowAudit, setRowAuditState] = useState<Record<number, string>>({});
   const [autoZoom, setAutoZoom] = useState(() => {
     try {
       return localStorage.getItem(AUTO_ZOOM_KEY) === "1";
@@ -201,6 +205,7 @@ export default function App() {
     setCellOcr(null);
     setOcrError(null);
     setTakenFrom({});
+    setRowAuditState({});
     try {
       const data = await fetchPage(p, f);
       if (token !== loadToken.current) return;
@@ -254,8 +259,11 @@ export default function App() {
       // registered in the database - worth saying now rather than at the first
       // save.
       try {
-        const { observations } = await fetchObservations(p, f);
+        const { observations, row_audit } = await fetchObservations(p, f);
         if (token !== loadToken.current) return;
+        const audit: Record<number, string> = {};
+        for (const [row, status] of Object.entries(row_audit ?? {})) audit[Number(row)] = status;
+        setRowAuditState(audit);
         const existing: Record<number, SaveState> = {};
         const byRow: Record<number, PageObservation> = {};
         for (const obs of observations) {
@@ -274,7 +282,9 @@ export default function App() {
         // done. Half-finished pages are the normal case once more than one
         // person works a volume, and re-reading a finished officer to find the
         // edge of the work is pure waste.
-        const nextOpen = data.officers.findIndex((o) => !(o.index in existing));
+        const nextOpen = data.officers.findIndex(
+          (o) => !(o.index in existing) && audit[o.index] !== "extra_row",
+        );
         if (nextOpen > 0) setOfficerIndex(nextOpen);
       } catch {
         setDbWarning(
@@ -437,16 +447,22 @@ export default function App() {
   // and a mark on nearly everything tells the reader nothing.
   const officerStates = useMemo<OfficerState[]>(
     () =>
-      (page?.officers ?? []).map((o) => ({
-        recorded: saves[o.index]?.state === "saved",
-        failed: saves[o.index]?.state === "error",
-        typed: !isBlank(entries[o.index] ?? {}) && saves[o.index]?.state !== "saved",
-        differs: Object.values(cellOcr?.results ?? {}).some(
-          (r) =>
-            r.index === o.index && r.status === "alternative" && r.rerun.form_key != null,
-        ),
-      })),
-    [page, saves, entries, cellOcr],
+      (page?.officers ?? []).map((o) => {
+        const marked = rowAudit[o.index] === "extra_row";
+        const kind = proposals?.officers.find((p) => p.index === o.index)?.column_kind;
+        return {
+          recorded: saves[o.index]?.state === "saved",
+          failed: saves[o.index]?.state === "error",
+          typed: !isBlank(entries[o.index] ?? {}) && saves[o.index]?.state !== "saved",
+          differs: Object.values(cellOcr?.results ?? {}).some(
+            (r) =>
+              r.index === o.index && r.status === "alternative" && r.rerun.form_key != null,
+          ),
+          marked,
+          suggested: !marked && kind && kind.kind !== "officer" ? kind : null,
+        };
+      }),
+    [page, saves, entries, cellOcr, rowAudit, proposals],
   );
 
   // The page job reports by polling. Results land in the pane as each cell is
@@ -507,6 +523,7 @@ export default function App() {
     [page, officer],
   );
   const ocrKeysRef = useRef({ page: startPageOcr, cell: () => {} });
+  const rowKeysRef = useRef<() => void>(() => {});
   ocrKeysRef.current = {
     page: startPageOcr,
     cell: () => {
@@ -574,6 +591,9 @@ export default function App() {
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         ocrKeysRef.current.cell();
+      } else if (e.key === "x" || e.key === "X") {
+        e.preventDefault();
+        rowKeysRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -669,6 +689,47 @@ export default function App() {
     setOfficerIndex(index);
   };
 
+  // A column of the grid that holds no officer - a section label, the column
+  // legend, an unused slot - marked by the reader, so the page can be finished.
+  const markRow = async (index: number, notOfficer: boolean) => {
+    if (!page) return;
+    try {
+      const saved = await setRowAudit(page.pid, page.frame, index, notOfficer ? "extra_row" : "ok");
+      cellsEnsured.current.add(`${page.pid}:${page.frame}`);
+      setRowAuditState((prev) => {
+        const next = { ...prev };
+        if (saved.audit_status === "ok") delete next[index];
+        else next[index] = saved.audit_status;
+        return next;
+      });
+      // Marking the officer in hand moves on to the next one still to read.
+      if (notOfficer && index === officerIndex && saved.audit_status === "extra_row") {
+        const after = page.officers.findIndex(
+          (o) =>
+            o.index > index &&
+            saves[o.index]?.state !== "saved" &&
+            rowAudit[o.index] !== "extra_row",
+        );
+        if (after >= 0) setOfficerIndex(after);
+      }
+    } catch (e) {
+      if (e instanceof NotIdentified) {
+        signOut("Your id code stopped being recognized. Enter it again.");
+        return;
+      }
+      setError(`Could not mark officer ${index + 1}: ${(e as Error).message ?? String(e)}`);
+    }
+  };
+  const suggestedNotOfficers = officerStates
+    .map((state, i) => (state.suggested && !state.recorded ? i : -1))
+    .filter((i) => i >= 0);
+  const markSuggested = async () => {
+    for (const i of suggestedNotOfficers) await markRow(i, true);
+  };
+  rowKeysRef.current = () => {
+    if (officer) void markRow(officerIndex, rowAudit[officerIndex] !== "extra_row");
+  };
+
   const changeAutoZoom = (on: boolean) => {
     setAutoZoom(on);
     try {
@@ -701,10 +762,12 @@ export default function App() {
     setFrame(target);
     load(page?.pid ?? pid, target);
   };
+  const markedCount = Object.values(rowAudit).filter((status) => status === "extra_row").length;
+  const liveOfficers = (page?.officer_count ?? 0) - markedCount;
   const pageComplete =
     Boolean(page) &&
-    (page?.officer_count ?? 0) > 0 &&
-    savedCount >= (page?.officer_count ?? 0) &&
+    liveOfficers > 0 &&
+    savedCount >= liveOfficers &&
     (page?.panels_missing.length ?? 0) === 0;
 
   return (
@@ -766,13 +829,25 @@ export default function App() {
         {loading && <p className="status">loading frame {frame}…</p>}
         {page && !loading && (
           <p className="status">
-            <code>{page.template_id}</code> · {page.officer_count} officers
+            <code>{page.template_id}</code> · {liveOfficers} officers
+            {markedCount > 0 && ` (${markedCount} column${markedCount === 1 ? "" : "s"} marked not an officer)`}
             {page.panels_total > 1 &&
               ` across ${page.panels_registered.length} of ${page.panels_total} leaves`}{" "}
             · {savedCount} recorded · {page.bands_matched}/{page.bands_total} bands ·
             skew {page.skew_deg}°
             {page.needs_review && (
               <span className="tag tag--suspect">needs review</span>
+            )}
+            {suggestedNotOfficers.length > 0 && (
+              <button
+                type="button"
+                className="tag tag--provisional tag--action"
+                onClick={markSuggested}
+                title="Columns read as a section label, the column legend or an unused slot"
+              >
+                mark {suggestedNotOfficers.length} column
+                {suggestedNotOfficers.length === 1 ? "" : "s"} not an officer
+              </button>
             )}
             {/* A leaf that matched no template carries officers nobody can
                 reach from here. Saying so is the whole point: a scan whose
@@ -785,8 +860,8 @@ export default function App() {
                   : `${page.panels_missing.length} leaves did not register — their officers are NOT on this page`}
               </span>
             )}
-            {savedCount >= page.officer_count &&
-              page.officer_count > 0 &&
+            {savedCount >= liveOfficers &&
+              liveOfficers > 0 &&
               (page.panels_missing.length === 0 ? (
                 <button
                   type="button"
@@ -862,6 +937,9 @@ export default function App() {
             pageComplete={pageComplete}
             nextPageLabel={pageComplete ? `next unread page ${nextUnread}` : null}
             onNextPage={() => openFrame(nextUnread)}
+            marked={rowAudit[officerIndex] === "extra_row"}
+            columnKind={officerProposals?.column_kind ?? null}
+            onMark={(notOfficer) => markRow(officerIndex, notOfficer)}
           />
           <Candidates
             field={activeField}

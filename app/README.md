@@ -71,6 +71,7 @@ Two behaviours worth knowing before building against it:
 | `GET /ocr/engine` | Whether NDLOCR-Lite can be driven here, and why not if it cannot |
 | `GET` / `POST` / `DELETE /volumes/{pid}/pages/{frame}/cell-ocr` | The page's zoomed re-readings; start (`?start=` officer first) or cancel the background job |
 | `POST /volumes/{pid}/pages/{frame}/officers/{index}/cells/{field}/cell-ocr` | Re-read one cell now and compare it with NDL's reading |
+| `POST /volumes/{pid}/pages/{frame}/rows/{index}/audit` | Mark a grid column not an officer (`extra_row`), or undo it; attributed, and a validation flag is never cleared |
 
 **Pixels come from our cache, never from the institution.** An annotator
 stepping cell to cell would otherwise fire a request at NDL per crop and a tile
@@ -287,6 +288,18 @@ name (NDLOCR-Lite gave four birth dates as names); a post read as nothing but
 numerals is refused (only the posting date was read); and a zoomed name reading
 with gaps between characters is unreadable, not an alternative (every one was
 missing characters).
+
+## Columns that hold no officer (10 Sep 2026)
+
+Registration places every column the rulings define, and some hold no officer: the
+section label at the edge of a left-hand leaf (frames 95-108 of pid 1449426), the
+column legend where a section starts (frame 105), unused slots at a section's end
+(frame 104). Counted as officers they kept those pages from ever being complete.
+`proposal_service.column_kind` proposes such columns from what NDL read - only for a
+column with no seniority digits - and the reader marks them with
+`roster_cell.audit_status = 'extra_row'`, the schema's existing mark for a row that
+is not a real entry. Row numbers never change; completeness, resume, the strip and
+the worksheet all leave marked columns out.
 
 ## Not built yet
 
