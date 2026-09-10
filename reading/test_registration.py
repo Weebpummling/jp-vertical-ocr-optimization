@@ -229,6 +229,97 @@ class CellGeometryTests(unittest.TestCase):
                          self.grid.n_officer_columns * len(self.template.fields))
 
 
+class RequiredBandTests(unittest.TestCase):
+    """A band whose absence means another layout, not a faint ruling."""
+
+    def setUp(self):
+        self.grid = R.detect_grid(make_panel(), R.Panel(0, 0, PANEL_W, PANEL_H))
+        # the page lacks the ruling at 0.62; one miss is within min_bands_matched
+        self.bands = sorted(BAND_FRACS + (0.62,))
+        self.missing = self.bands.index(0.62)
+
+    def template(self, required):
+        return make_template(template_id="req", band_fracs=self.bands,
+                             match={"tolerance_frac": 0.015, "min_bands_matched": 7,
+                                    "required_bands": required,
+                                    "min_explained_frac": 0.8, "min_columns": 2})
+
+    def test_one_forgiven_miss_still_registers(self):
+        self.assertIsNotNone(R.classify(self.grid, [self.template([])]))
+
+    def test_missing_a_required_band_is_another_layout(self):
+        self.assertIsNone(R.classify(self.grid, [self.template([self.missing])]))
+
+    def test_a_required_band_that_is_present_does_not_reject(self):
+        self.assertIsNotNone(R.classify(self.grid, [self.template([1, 2])]))
+
+
+class CameraScanTests(unittest.TestCase):
+    """The Taishō volumes are camera scans of the bound book, not film scans.
+
+    Grey paper on a backdrop just as bright, the binding strip showing above and
+    below the gutter: there is no bright page region to find. The two tables'
+    frames nearly meet at the gutter, and the page edge rules a long line above
+    the table. Synthetic, at full-scan size; detection runs at SCALE.
+    """
+
+    W, H = 2400, 1600
+    TOP, BOT = 300, 1300
+    BANDS = (0.0, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
+    PITCH = 150
+    RIGHT, LEFT = (1260, 2160), (270, 1170)     # 6 officers each, 90 px apart
+
+    @classmethod
+    def spread(cls) -> np.ndarray:
+        img = np.full((cls.H, cls.W), 205, np.uint8)       # backdrop
+        img[150:1450, 150:2250] = 200                       # paper, no brighter
+        img[:, 1205:1225] = 80                              # gutter shadow
+        img[:150, 1195:1235] = 30                           # binding strip, above
+        img[1450:, 1195:1235] = 30                          # and below the pages
+        img[200:204, 150:2250] = 60                         # page edge, above the table
+        for x0, x1 in (cls.RIGHT, cls.LEFT):
+            for f in cls.BANDS:
+                y = int(cls.TOP + f * (cls.BOT - cls.TOP))
+                img[y - 2:y + 3, x0:x1 + 1] = 40
+            for x in range(x0, x1 + 1, cls.PITCH):
+                img[cls.TOP:cls.BOT, x - 2:x + 3] = 40
+        return img
+
+    @staticmethod
+    def small(img):
+        return cv2.resize(img, None, fx=R.SCALE, fy=R.SCALE, interpolation=cv2.INTER_AREA)
+
+    def test_camera_and_film_scans_are_told_apart(self):
+        film = np.zeros((self.H, self.W), np.uint8)
+        film[150:1450, 300:2100] = 200
+        self.assertEqual(R.scan_kind(self.small(film)), R.FILM)
+        self.assertEqual(R.scan_kind(self.small(self.spread())), R.BACKDROP)
+
+    def test_both_leaves_keep_every_officer_column(self):
+        """The frame beside the gutter survives the cut; the neighbour's does not join."""
+        grids = R.detect_page(self.spread())
+        self.assertEqual(len(grids), 2)
+        for grid in grids:
+            self.assertEqual(grid.n_officer_columns, 6)
+            self.assertEqual(grid.interpolated_columns, ())
+
+    def test_a_line_outside_the_table_is_not_a_band(self):
+        grids = R.detect_page(self.spread())
+        for grid in grids:
+            self.assertEqual(len(grid.band_ys), len(self.BANDS))
+            self.assertEqual(grid.band_fracs[0], 0.0)
+
+    def test_the_table_filter_is_for_camera_scans_only(self):
+        """Film-scan registration is untouched: the Shōwa templates assume it."""
+        small = self.small(self.spread())
+        p = R.find_panels(small)[0]
+        crop = small[p.y:p.y + p.h, p.x:p.x + p.w]
+        camera = R.detect_grid(crop, p, kind=R.BACKDROP)
+        film = R.detect_grid(crop, p, kind=R.FILM)
+        self.assertEqual(len(camera.band_ys), len(self.BANDS))
+        self.assertEqual(len(film.band_ys), len(self.BANDS) + 1)
+
+
 class ShippedTemplateTests(unittest.TestCase):
     """The committed artifact must stay loadable and self-consistent."""
 
@@ -252,6 +343,9 @@ class ShippedTemplateTests(unittest.TestCase):
         for t in R.load_library(self.dir):
             self.assertLessEqual(t.min_bands_matched, len(t.band_fracs))
             self.assertGreaterEqual(t.min_columns, 2)
+            for b in t.required_bands:
+                self.assertTrue(0 <= b < len(t.band_fracs),
+                                f"{t.template_id}: required band {b} out of range")
 
     def test_one_layout_family_names_the_same_fields(self):
         """Editions of one printed layout differ in where the rulings fall, never

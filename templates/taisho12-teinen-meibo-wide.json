@@ -1,0 +1,85 @@
+{
+  "template_id": "taisho12-teinen-meibo-wide",
+  "layout_family": "taisho12_seniority_main",
+  "series": "active",
+  "era": "taisho",
+  "description": "Main roster table of the 陸軍現役将校同相当官実役停年名簿 大正12年9月1日調, wide-column pages: the 将官 and 佐官 sections, 5-8 officers per leaf, each section headed by rank or branch+rank (中将, 歩兵少佐) in the outer margin. Officers run right-to-left as vertical column strips; six horizontal bands are the field rows. A camera scan of the bound book, not a film scan.",
+
+  "provenance": {
+    "derived_from_pid": "930894",
+    "edition": "大正12年9月1日調",
+    "frames_sampled": [5, 12, 20, 40, 60, 100, 150, 250, 350, 450, 550, 650, 750, 830, 850],
+    "panels_used": 4,
+    "method": "Rulings detected per leaf on the camera-scan path of reading/registration.py (gutter cut with overlap, adaptive threshold, horizontal rulings kept only within the officer-column rulings). A leaf was admitted only if it carried all five interior rulings of this layout within 0.012: frame 20 right leaf (中将), frame 60 left leaf, both leaves of frame 100 (歩兵少佐). Pooled fractions clustered at 0.015, band = cluster median; every band has support 4/4 and spread <= 0.0034. The outer bands are the table frame, 0.0 and 1.0 by construction; the thin inner rule of the double frame (~0.007 in) falls within tolerance of them. Not admitted: frame 60 right leaf (lost the 0.754 ruling), frame 20 left leaf and both leaves of frame 40 (no ruling under 列次 - the 各部 layout, which prints no 列次 row; frame 20's left leaf is 主計總監), frames 830 and 850 (休職 sections, a different table), the narrow 尉官 pages (their own template), front matter 5 and 12.",
+    "derived_on": "2026-09-10",
+    "field_labels": "Band names are printed in the legend column that opens each 尉官 section (frames 250 and 350: 現官ノ實役停年 / 列次 / 任官ノ年月日 / 職名 / 本邦位、勳、功、爵、學位 外國勳章 / 氏名 with 年齡 between). No legend page for the wide layout is in the sample; its six bands hold the same content in the same order (frame 100 compared by eye). Nobody has confirmed any label on this edition."
+  },
+
+  "band_fracs": [0.0, 0.1567, 0.1989, 0.4187, 0.6082, 0.754, 1.0],
+
+  "match": {
+    "tolerance_frac": 0.01,
+    "min_bands_matched": 6,
+    "required_bands": [2],
+    "min_explained_frac": 0.8,
+    "min_columns": 2,
+    "note": "Measured 10 Sep 2026 against every cached 1923, 1926, 1933 and 1935 leaf. Accepted: frame 20 right leaf, both leaves of 60 and 100 - 6-7 of 7 bands, all 100% explained. required_bands [2] is the ruling under 列次: frame 20's left leaf and both leaves of 40 score 6/7 and 100% explained, exactly like a real page that lost one thin ruling, but they are the 各部 layout, which has no 列次 row and would otherwise register with an invented seniority cell. Frame 830's left leaf (休職) matches 5/7. Tolerance 0.01, not 0.015: bands spread <= 0.0034 across panels, and the narrow template of this edition sits only 0.009 away in its upper bands. No Shōwa leaf matches more than 5 of 7 or is more than 50% explained; no 1926 leaf passes."
+  },
+
+  "columns": {
+    "expected": 8,
+    "direction": "rtl",
+    "note": "Nominal count only, never a gate: 中将 pages carry 5 per leaf, 佐官 pages 8. Officer index 0 is the rightmost strip."
+  },
+
+  "fields": [
+    {
+      "name": "service_in_rank",
+      "band": [0, 1],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "現官ノ實役停年 (legend) - elapsed service in the current rank as 年、月、日, e.g. 二、一、一二 on frame 100 (歩兵少佐). NOT a date: do not parse with reading/eradate.py. Printed once and dittoed 同 along the officers who share it. The Shōwa band of the same name holds the same thing."
+    },
+    {
+      "name": "seniority_no",
+      "band": [1, 2],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.seniority_no",
+      "note": "列次 (legend) - Arabic numerals ascending right-to-left within a section (frame 100 runs 426-433 on the right leaf, 434-441 on the left). The row anchor for audit. Numbered within rank: 引田乾作 is 44 among 中将 here."
+    },
+    {
+      "name": "appointment_dates",
+      "band": [2, 3],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "任官ノ年月日 (legend) - ONE cell holding every appointment, each date tagged with the rank it conferred: 明治三七、一一、三〇少尉 / 同四〇、一二、二六中尉 / 大正…大尉 / 同…少佐, with the era dittoed 同. The Shōwa volumes rule 現階級 / 前階級 / 少尉任官 as separate bands; here they share a cell, so the schema's commissioning_date is the line tagged 少尉 inside it. Not a single date: do not parse the cell with eradate, and it is deliberately not mapped to commissioning_date."
+    },
+    {
+      "name": "post",
+      "band": [3, 4],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.post",
+      "note": "職名 (legend) - the assignment (歩兵第五十四聯隊大隊長, 參謀本部々員), on some officers with a date in small type at the foot of the cell."
+    },
+    {
+      "name": "court_rank_decorations",
+      "band": [4, 5],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "本邦位、勳、功、爵、學位 / 外國勳章 (legend) - court rank, orders, Golden Kite, peerage, degree, then foreign orders, e.g. 從六、瑞四、旭四. No observation column."
+    },
+    {
+      "name": "name_raw",
+      "band": [5, 6],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.name_raw",
+      "note": "氏名 (legend) in large type, with 年齡 in small type beneath: the officer's AGE as 年、月 at the 調 date, NOT a birth date as on the Shōwa pages. Cross-checked across editions: 引田乾作 reads 五一、一〇 here and 五四、一〇 in 大正15年調, 和田亀治 五二、九 and 五五、九 - three years apart to the month. reading/binning.py sets a birth date aside only when it carries an era mark, so these figures stay in the name proposal; the reader separates them."
+    }
+  ]
+}

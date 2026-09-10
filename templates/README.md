@@ -25,6 +25,24 @@ that uses them is [`reading/registration.py`](../reading/registration.py); tests
 |---|---|---|
 | `showa-teinen-meibo-A.json` | Shōwa main roster table (現役将校実役停年名簿) | pid 1449426 (昭和8年調), 7 panels across frames 60–700 |
 | `showa-teinen-meibo-B.json` | same layout, 1935 edition: rulings sit lower, past A's tolerance; fields carried over from A, unconfirmed on this edition | pid 1449474 (昭和10年調), 8 panels across frames 100–700 |
+| `taisho12-teinen-meibo-wide.json` | Taishō main roster table (陸軍現役将校同相当官実役停年名簿), 1923 edition, 将官・佐官 pages: 5–8 officers per leaf, six bands, one cell for all appointment dates, no cohort row | pid 930894 (大正12年調), 4 panels across frames 20–100 |
+| `taisho12-teinen-meibo-narrow.json` | same edition and fields, 尉官 pages listed by regiment: 13 strips per leaf, lower bands ruled at other heights | pid 930894, 6 panels across frames 150–650 |
+| `taisho15-teinen-meibo-wide.json` | 1926 edition, 将官・佐官 pages: the 1923 bands plus a 出身期別 row | pid 1908494 (大正15年調), 5 panels across frames 20–150 |
+| `taisho15-teinen-meibo-narrow.json` | same edition and fields, 尉官 pages: 13 strips per leaf, the two lowest rulings lower | pid 1908494, 4 panels across frames 350–550 |
+
+**Every Taishō label is unconfirmed.** The bands are named from the legend column the
+volumes print at the head of each 尉官 section, but none has been checked by the lead. See
+each field's `note` - above all `appointment_dates`, the one cell that holds every rank's
+appointment date (so `commissioning_date` is a line inside it, not a band), and `name_raw`,
+where the small figures are 年齡 (age), not a birth date.
+
+**Camera scans.** The Taishō volumes are photographs of the bound book, not film scans, and
+`reading/registration.py` handles them on their own path (`scan_kind`): leaves overlap past
+the gutter cut, rulings are found with a local threshold, and horizontal lines outside the
+officer-column rulings - page edges, cover, binding strip - are dropped. Film scans take the
+old path unchanged; every cached 1933 and 1935 frame registered identically before and after.
+Not yet covered by any template, and so reported rather than registered: the 各部 sections
+(no 列次 row), the 休職 sections, and the index.
 
 **Reading a template.** `band_fracs` are horizontal ruling positions as fractions of table
 height. `fields` name the space *between* two bands by index, so a field's edges follow the
@@ -49,3 +67,6 @@ python -m unittest discover -s reading -p "test_*.py"
 4. Read a page to name the fields — and mark as unconfirmed anything you are guessing.
 5. Set thresholds from measurement, using non-matching pages as negative controls. Record
    the numbers in `match.note` so the next person knows why the gate sits where it does.
+   Where a neighbouring layout differs by missing a ruling rather than moving one, name that
+   band in `match.required_bands`: `min_bands_matched` forgives any one miss and cannot
+   tell a faint line from a row the page never had.

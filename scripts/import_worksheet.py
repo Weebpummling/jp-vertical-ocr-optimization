@@ -53,8 +53,8 @@ GETA = "〓"
 OK_MARKS = ("ok", "ｏｋ", "✓", "✔", "確認", "確認済")
 FORM_KEYS = ("seniority_no", "name_raw", "branch", "rank", "post",
              "commissioning_date", "notes")
-UNSTORED = ("birth", "cohort", "rank_date", "prev_rank_date", "service_in_rank",
-            "court_rank_decorations")
+UNSTORED = ("birth", "cohort", "rank_date", "prev_rank_date", "appointment_dates",
+            "service_in_rank", "court_rank_decorations")
 DITTO_COLUMN = {"branch": "branch_code", "rank": "rank_code"}
 
 

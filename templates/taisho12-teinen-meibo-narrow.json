@@ -1,0 +1,85 @@
+{
+  "template_id": "taisho12-teinen-meibo-narrow",
+  "layout_family": "taisho12_seniority_main",
+  "series": "active",
+  "era": "taisho",
+  "description": "Main roster table of the 陸軍現役将校同相当官実役停年名簿 大正12年9月1日調, narrow-column pages: the 尉官 sections, listed by regiment (歩兵第三聯隊少尉, 歩兵第二聯隊中尉), 13 strips per leaf. A section opens with a section-label column and a legend column inside the table, and a leaf may end in unused blank strips (frame 250: one officer, then blanks) - strips that hold no officer are what roster_cell.audit_status='extra_row' is for. Same six bands as the wide pages, ruled at different heights. A camera scan of the bound book.",
+
+  "provenance": {
+    "derived_from_pid": "930894",
+    "edition": "大正12年9月1日調",
+    "frames_sampled": [5, 12, 20, 40, 60, 100, 150, 250, 350, 450, 550, 650, 750, 830, 850],
+    "panels_used": 6,
+    "method": "Rulings detected per leaf on the camera-scan path of reading/registration.py. A leaf was admitted only if it carried all five interior rulings of this layout within 0.012: both leaves of frame 150, the right leaves of 350 and 450, the left leaves of 550 and 650. Pooled fractions clustered at 0.015, band = cluster median; every band has support 6/6, spread <= 0.0027 except the 0.1465 band, where extra rulings on frame 650's left leaf chain into the cluster (spread 0.026, median unaffected). Outer bands are the table frame, 0.0 and 1.0. Not admitted: frame 250 (right leaf lost two rulings, left leaf is mostly blank strips), 350 left (lost 0.147), 450 left (lost 0.408), 550 right (one column found), 650 right, 750 both leaves (lost the ruling under 列次), 830 and 850 (休職 sections).",
+    "derived_on": "2026-09-10",
+    "field_labels": "Read from the legend column printed inside the table on frames 250 and 350: 現官ノ實役停年 / 列次 / 任官ノ年月日 / 職名 / 本邦位、勳、功、爵、學位 外國勳章 / 氏名 with 年齡 between. Carried band for band to the wide template of this edition. Nobody has confirmed any label."
+  },
+
+  "band_fracs": [0.0, 0.1465, 0.1887, 0.4083, 0.6386, 0.7789, 1.0],
+
+  "match": {
+    "tolerance_frac": 0.01,
+    "min_bands_matched": 6,
+    "required_bands": [2],
+    "min_explained_frac": 0.8,
+    "min_columns": 2,
+    "note": "Measured 10 Sep 2026 against every cached 1923, 1926, 1933 and 1935 leaf. Accepted: both leaves of 150, 350 and 450, the left leaves of 550 and 650 - 6-7 of 7 bands, 80-100% explained (650's left leaf carries extra rulings: 0.80). required_bands [2] is the ruling under 列次, as on the wide template; it costs frame 750, whose two leaves are real 尉官 pages scoring 6/7 with that thin ruling lost - left as misses rather than let 各部 pages in. Also rejected: 250 right leaf (5/7), 830 and 850 (休職, 5/7 and missing band 2), 550 and 650 right leaves (misdetected). Tolerance 0.01 for the same reason as the wide template. No Shōwa leaf matches more than 5 of 7 or is more than 50% explained."
+  },
+
+  "columns": {
+    "expected": 13,
+    "direction": "rtl",
+    "note": "Nominal count only, never a gate: 13 strips per leaf including section-label, legend and unused strips; 12-14 detected. Officer index 0 is the rightmost strip."
+  },
+
+  "fields": [
+    {
+      "name": "service_in_rank",
+      "band": [0, 1],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "現官ノ實役停年 (legend) - elapsed service in the current rank as 年、月、日, e.g. 二、八、八 on frame 350. NOT a date: do not parse with reading/eradate.py. Printed once and dittoed 同 along the officers who share it."
+    },
+    {
+      "name": "seniority_no",
+      "band": [1, 2],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.seniority_no",
+      "note": "列次 (legend) - Arabic numerals. Within a regiment's section they ascend right-to-left but with wide gaps (frame 350: 57, 168, 198, 613 ...), because the number is the officer's place in the whole rank, not in the regiment. The monotone audit holds within a section; the gaps are not missing officers."
+    },
+    {
+      "name": "appointment_dates",
+      "band": [2, 3],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "任官ノ年月日 (legend) - ONE cell holding every appointment, each date tagged with the rank it conferred (大正九、一二、二五少尉; 大正五、一二、二六少尉 / 同九、四、一中尉). The schema's commissioning_date is the line tagged 少尉 inside it. Not a single date: do not parse the cell with eradate; deliberately not mapped to commissioning_date."
+    },
+    {
+      "name": "post",
+      "band": [3, 4],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.post",
+      "note": "職名 (legend) - the assignment, mostly 聯隊附 on these pages. Tallest band."
+    },
+    {
+      "name": "court_rank_decorations",
+      "band": [4, 5],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "本邦位、勳、功、爵、學位 / 外國勳章 (legend) - e.g. 正八、瑞七; 從七、旭六. No observation column."
+    },
+    {
+      "name": "name_raw",
+      "band": [5, 6],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.name_raw",
+      "note": "氏名 (legend) in large type, with 年齡 in small type beneath: AGE as 年、月 at the 調 date (二四、八 for a 少尉), NOT a birth date. See the wide template of this edition for the cross-edition check. The figures stay in the name proposal; the reader separates them."
+    }
+  ]
+}

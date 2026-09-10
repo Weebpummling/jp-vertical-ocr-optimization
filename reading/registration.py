@@ -51,6 +51,31 @@ EDGE_LO, EDGE_HI = 0.03, 0.95
 MAX_PITCH_MULTIPLE = 4
 PITCH_TOL = 0.2
 
+# Scans come in two kinds, and a leaf has to be found differently on each.
+# Microfilm-derived scans (the Shōwa volumes, pids 1449426 and 1449474) show
+# bright pages on a black film border. Camera scans of the bound book (the
+# Taishō volumes, pids 930894 and 1908494) show grey or tan paper on a light
+# backdrop, with the cover, the edges of the page block and a black binding
+# strip in frame - paper and backdrop are the same brightness, so there is no
+# bright region to find. Measured at SCALE over every cached frame (10 Sep
+# 2026): the largest bright region covers 0.34-0.73 of a film scan and 1.00 of
+# every camera scan.
+FILM, BACKDROP = "film", "backdrop"
+BACKDROP_REGION_FRAC = 0.9
+# Rulings on the camera scans are thin and grey, and the light falls unevenly
+# across a curved page: one Otsu threshold per leaf dropped most interior
+# rulings of pid 1908494 (1 of 8 officer columns found on frame 100). A local
+# threshold keeps them - 8 of 8 on both leaves. Block and offset at SCALE.
+ADAPTIVE_BLOCK, ADAPTIVE_C = 31, 10
+# On a camera scan the two tables' frames nearly meet at the gutter (25-70 px
+# apart at SCALE), so a cut at the gutter can slice a leaf's own frame off. Each
+# leaf reaches this fraction of the scan width past the cut; the neighbour's
+# frame that comes with it sits off the officer-column pitch and is not taken.
+GUTTER_OVERLAP = 0.05
+# Horizontal rulings further than this (of panel height) outside the vertical
+# reach of the officer-column rulings are not table - see _within_column_rulings.
+RULING_EXTENT_TOL = 0.015
+
 
 # --------------------------------------------------------------------------
 # geometry containers
@@ -126,6 +151,7 @@ class Template:
     min_columns: int
     expected_columns: int
     provenance: dict
+    required_bands: tuple[int, ...] = ()
 
     @classmethod
     def from_dict(cls, d: dict) -> "Template":
@@ -141,6 +167,7 @@ class Template:
             min_columns=m.get("min_columns", 2),
             expected_columns=d.get("columns", {}).get("expected", 0),
             provenance=d.get("provenance", {}),
+            required_bands=tuple(m.get("required_bands", ())),
         )
 
 
@@ -173,13 +200,8 @@ class Registration:
 # detection
 # --------------------------------------------------------------------------
 
-def find_panels(gray: np.ndarray) -> list[Panel]:
-    """Locate page panels (bright) on the dark film border, right-hand page first.
-
-    The two pages of a spread usually touch, so contour splitting is unreliable
-    (Spike C lesson 3); find the bright region, then cut it at the darkest column
-    near the middle - the gutter shadow.
-    """
+def _bright_region(gray: np.ndarray) -> tuple[int, int, int, int] | None:
+    """The largest bright region of a scan (x, y, w, h), or None."""
     _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     bw = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
     contours, _ = cv2.findContours(bw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -187,14 +209,49 @@ def find_panels(gray: np.ndarray) -> list[Panel]:
     regions = [cv2.boundingRect(c) for c in contours]
     regions = [r for r in regions if r[2] * r[3] > MIN_PANEL_AREA * w * h]
     if not regions:
+        return None
+    return max(regions, key=lambda r: r[2] * r[3])
+
+
+def scan_kind(gray: np.ndarray) -> str | None:
+    """FILM (pages on a dark border), BACKDROP (a camera scan of the book), or
+    None when the scan has no bright region at all."""
+    region = _bright_region(gray)
+    if region is None:
+        return None
+    h, w = gray.shape
+    return BACKDROP if region[2] * region[3] >= BACKDROP_REGION_FRAC * w * h else FILM
+
+
+def find_panels(gray: np.ndarray) -> list[Panel]:
+    """Locate the page panels of a scan, right-hand page first.
+
+    The two pages of a spread usually touch, so contour splitting is unreliable
+    (Spike C lesson 3); find the bright region, then cut it at the darkest column
+    near the middle - the gutter shadow, or on a camera scan the binding strip.
+
+    On a camera scan the bright region is the whole image (BACKDROP_REGION_FRAC),
+    so each leaf also carries backdrop, cover and page-block edges. Nothing about
+    the paper separates it from the backdrop, so the leaf is not trimmed here:
+    `detect_grid` keeps only rulings inside the table's own column rulings. What
+    the cut does need is overlap (GUTTER_OVERLAP) - without it the frame ruling
+    beside the gutter falls outside EDGE_HI and each leaf loses an officer.
+    """
+    region = _bright_region(gray)
+    if region is None:
         return []
-    x, y, cw, ch = max(regions, key=lambda r: r[2] * r[3])
+    h, w = gray.shape
+    x, y, cw, ch = region
     col_mean = gray[y:y + ch, x:x + cw].mean(axis=0)
     mid0, mid1 = int(cw * 0.35), int(cw * 0.65)
     if mid1 <= mid0:
         return [Panel(x, y, cw, ch)]
     gutter = mid0 + int(np.argmin(col_mean[mid0:mid1]))
-    return [Panel(x + gutter, y, cw - gutter, ch), Panel(x, y, gutter, ch)]
+    if cw * ch < BACKDROP_REGION_FRAC * w * h:
+        return [Panel(x + gutter, y, cw - gutter, ch), Panel(x, y, gutter, ch)]
+    ext = int(GUTTER_OVERLAP * cw)
+    return [Panel(x + gutter - ext, y, cw - gutter + ext, ch),
+            Panel(x, y, gutter + ext, ch)]
 
 
 def _ruling_masks(binary: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -362,22 +419,58 @@ def _table_columns(vlines: list[int], panel_w: int) -> tuple[list[int], list[int
     return columns, interpolated
 
 
-def detect_grid(panel_gray: np.ndarray, panel: Panel) -> Grid | None:
+def _within_column_rulings(hlines: list[int], vert: np.ndarray, columns: list[int],
+                           interpolated: list[int]) -> list[int]:
+    """The horizontal rulings that lie within the officer-column rulings' reach.
+
+    A camera-scan leaf carries more than its table: the page edge, the cover and
+    the binding strip rule long horizontal lines above and below it, and the
+    first and last detected line are taken as the table's top and bottom. The
+    officer columns are ruled frame to frame, so their vertical extent is the
+    table's, and a line outside it is not a band - 1 to 9 of them per leaf on the
+    Taishō samples. Film scans never pass through here: their panels are the
+    page alone, and the Shōwa templates were derived without this filter.
+    """
+    firsts, lasts = [], []
+    for x in columns:
+        if x in interpolated:
+            continue
+        rows = np.flatnonzero(vert[:, max(0, x - 3):x + 4].any(axis=1))
+        if len(rows):
+            firsts.append(rows[0])
+            lasts.append(rows[-1])
+    if not firsts:
+        return []
+    top, bottom = float(np.median(firsts)), float(np.median(lasts))
+    tol = RULING_EXTENT_TOL * vert.shape[0]
+    return [y for y in hlines if top - tol <= y <= bottom + tol]
+
+
+def _binarize(gray: np.ndarray, kind: str) -> np.ndarray:
+    """Ink as white. One Otsu threshold for film scans; a local threshold for
+    camera scans, whose rulings are faint and unevenly lit (ADAPTIVE_BLOCK)."""
+    if kind == BACKDROP:
+        return cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                     cv2.THRESH_BINARY_INV, ADAPTIVE_BLOCK, ADAPTIVE_C)
+    return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+
+def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM) -> Grid | None:
     """Detect the ruling grid on one already-cropped panel.
 
     `panel_gray` is the panel at detection scale; `panel` describes where that
-    panel sits in the original scan, so the result can be mapped back. Returns
-    None when the panel has no table-like ruling structure at all.
+    panel sits in the original scan, so the result can be mapped back; `kind` is
+    the scan's `scan_kind`. Returns None when the panel has no table-like ruling
+    structure at all.
     """
-    _, binv = cv2.threshold(panel_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binv = _binarize(panel_gray, kind)
     angle = _deskew_angle(binv)
     if abs(angle) > 0.05:
         ph, pw = panel_gray.shape
         rot = cv2.getRotationMatrix2D((pw / 2, ph / 2), angle, 1.0)
         panel_gray = cv2.warpAffine(panel_gray, rot, (pw, ph),
                                     flags=cv2.INTER_LINEAR, borderValue=255)
-        _, binv = cv2.threshold(panel_gray, 0, 255,
-                                cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        binv = _binarize(panel_gray, kind)
     horiz, vert = _ruling_masks(binv)
 
     hlines = _profile_lines(horiz, axis=0)
@@ -387,6 +480,10 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel) -> Grid | None:
     columns, interpolated = _table_columns(vlines, panel_gray.shape[1])
     if len(columns) < 2:
         return None
+    if kind == BACKDROP:
+        hlines = _within_column_rulings(hlines, vert, columns, interpolated)
+        if len(hlines) < 2:
+            return None
     return Grid(
         panel=panel,
         skew_deg=round(angle, 3),
@@ -401,9 +498,10 @@ def detect_page(image: np.ndarray, scale: float = SCALE) -> list[Grid]:
     """Detect grids for every page panel in a full scan image (reading order)."""
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     small = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    kind = scan_kind(small)
     grids = []
     for p in find_panels(small):
-        g = detect_grid(small[p.y:p.y + p.h, p.x:p.x + p.w], p)
+        g = detect_grid(small[p.y:p.y + p.h, p.x:p.x + p.w], p, kind=kind)
         if g is not None:
             grids.append(g)
     return grids
@@ -483,11 +581,20 @@ def classify(grid: Grid, templates: list[Template]) -> Registration | None:
       - `min_columns`        - and officer strips can actually be cut. Without
         interior vertical rulings there is no per-officer geometry to give the
         workstation, so rejecting is the honest outcome.
+
+    Plus one optional gate, `required_bands`: rulings whose absence means a
+    different printed layout rather than a faint line. `min_bands_matched`
+    forgives any one miss, and on the Taishō volumes that let a 各部 page - the
+    same table with no 列次 row - match the combatant template 6 of 7 with
+    everything explained, exactly like a real page that lost one thin ruling.
+    Which band is missing is what tells them apart.
     """
     best: Registration | None = None
     for t in templates:
         reg = register(grid, t)
         if reg.matched < t.min_bands_matched:
+            continue
+        if any(b in reg.unmatched_bands for b in t.required_bands):
             continue
         if reg.explained_frac < t.min_explained_frac:
             continue

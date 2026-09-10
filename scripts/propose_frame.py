@@ -29,7 +29,7 @@ import registration as R  # noqa: E402
 
 TEMPLATE_DIR = ROOT / "templates"
 FIELD_ORDER = ["seniority_no", "name_raw", "cohort", "post",
-               "commissioning_date", "rank_date", "prev_rank_date",
+               "commissioning_date", "rank_date", "prev_rank_date", "appointment_dates",
                "service_in_rank", "court_rank_decorations"]
 
 

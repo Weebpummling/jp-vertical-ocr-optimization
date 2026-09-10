@@ -67,7 +67,8 @@ CONFIDENT = ("ndl-ocr", "digits", "eradate", "inherited")
 # carrying two of them is the legend printed where a section begins.
 LEGEND_WORDS = ("次列", "氏名", "期別", "出身", "命課", "現任官", "前官", "初任", "位勳功")
 # Bands a section label is printed across - never the post, which an officer has.
-LABEL_BANDS = ("service_in_rank", "rank_date", "prev_rank_date", "commissioning_date")
+LABEL_BANDS = ("service_in_rank", "rank_date", "prev_rank_date", "commissioning_date",
+               "appointment_dates")
 
 # A parsed volume is ~35 MB of JSON. Keep the two most recent in memory - the
 # volume being worked and the one it was compared against - and no more.

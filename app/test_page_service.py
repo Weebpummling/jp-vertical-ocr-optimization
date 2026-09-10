@@ -14,9 +14,13 @@ import numpy as np
 import page_service as PS
 import registration as R
 
-# A synthetic two-page spread: bright throughout with a dark gutter down the
-# middle, which is how find_panels locates the right-hand page.
+# A synthetic two-page spread from a film scan: bright pages on a black film
+# border, with a dark gutter down the middle, which is how find_panels locates
+# the right-hand page. The border matters since 10 Sep 2026: a scan that is
+# bright edge to edge is a camera scan (registration.scan_kind) and takes the
+# camera-scan path, which this fixture does not model.
 W, H = 1600, 1200
+BORDER = 40
 GUTTER = (780, 820)
 TABLE_X0, TABLE_X1, PITCH = 900, 1500, 100      # 7 rulings -> 6 officers
 TABLE_Y0, TABLE_Y1 = 100, 1100
@@ -25,7 +29,9 @@ BANDS = (0.0, 0.1, 0.25, 0.5, 0.75, 1.0)
 
 def make_spread(*, drop_column: int | None = None) -> np.ndarray:
     img = np.full((H, W), 255, np.uint8)
-    img[:, GUTTER[0]:GUTTER[1]] = 30
+    img[:BORDER, :] = img[-BORDER:, :] = 0
+    img[:, :BORDER] = img[:, -BORDER:] = 0
+    img[:, GUTTER[0]:GUTTER[1]] = 0     # the darkest column must be the gutter, not a ruling
     height = TABLE_Y1 - TABLE_Y0
     for f in BANDS:
         y = int(TABLE_Y0 + f * height)
@@ -169,6 +175,34 @@ class VocabularyTests(unittest.TestCase):
             for variant in entry["variants"]:
                 self.assertNotIn(";", variant)
                 self.assertTrue(variant.strip())
+
+
+class TaishoRealPageTests(unittest.TestCase):
+    """Local-only: the camera-scanned Taishō volumes against their own templates.
+
+    Until 10 Sep 2026 frame 100 of both returned 422 - no leaf was found on a
+    grey page with no film border, and no template had their layout.
+    """
+
+    CASES = (("930894", "taisho12-teinen-meibo-wide"),
+             ("1908494", "taisho15-teinen-meibo-wide"))
+
+    def test_frame_100_registers_both_leaves(self):
+        home = os.environ.get("JP_OCR_DATA")
+        if not home:
+            self.skipTest("JP_OCR_DATA not set")
+        for pid, template in self.CASES:
+            path = Path(home) / "cache" / pid / "frame_0100.jpg"
+            if not path.exists():
+                continue
+            with self.subTest(pid=pid):
+                page = PS.register_file(path, pid, 100)
+                self.assertEqual(page.template_id, template)
+                self.assertEqual(page.panels_missing, ())
+                self.assertEqual(len(page.officers), 16)       # 8 per leaf
+                fields = {c.field for c in page.officers[0].cells}
+                self.assertIn("appointment_dates", fields)
+                self.assertNotIn("commissioning_date", fields)  # a line inside that cell
 
 
 class RealPageIntegrationTests(unittest.TestCase):

@@ -83,11 +83,14 @@ RECIPE = "cell-exact/border60; dates+service: ndl-line-segments/margin6 (2026-09
 NAME_GAP = re.compile(r"\S\s+\S")
 BORDER = 60
 SEGMENT_MARGIN = 6
-SEGMENT_FIELDS = ("commissioning_date", "rank_date", "prev_rank_date", "service_in_rank")
+# appointment_dates is the Taishō cell that holds every appointment date at once.
+SEGMENT_FIELDS = ("commissioning_date", "rank_date", "prev_rank_date", "service_in_rank",
+                  "appointment_dates")
 # The officer in hand is read field by field, the fields that re-read reliably
 # first, so the useful alternatives arrive before the dates do.
 FIELD_ORDER = ("seniority_no", "name_raw", "post", "cohort", "court_rank_decorations",
-               "commissioning_date", "rank_date", "prev_rank_date", "service_in_rank")
+               "commissioning_date", "rank_date", "prev_rank_date", "appointment_dates",
+               "service_in_rank")
 NOT_KANJI_NUMERALS = re.compile(r"[0-9A-Za-z*＊０-９Ａ-Ｚａ-ｚ]")
 WORKER_SCRIPT = Path(__file__).with_name("ndlocr_worker.py")
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)

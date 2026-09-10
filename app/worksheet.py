@@ -108,13 +108,16 @@ FIELD_JA = {
     "branch": "兵科", "rank": "階級", "post": "職名",
     "commissioning_date": "少尉任官", "rank_date": "現階級任官",
     "prev_rank_date": "前階級任官", "service_in_rank": "実役停年",
+    "appointment_dates": "任官ノ年月日",
     "court_rank_decorations": "位階勲等", "notes": "備考",
 }
 KIND_TEXT = {"section_label": "a section label", "legend": "the column legend",
              "blank": "an unused slot"}
+# A template names the fields its print has: the Shōwa volumes rule three date
+# rows, the Taishō volumes one appointment_dates cell holding every date.
 TEMPLATE_FIELDS = ("seniority_no", "name_raw", "cohort", "post",
                    "commissioning_date", "rank_date", "prev_rank_date",
-                   "service_in_rank", "court_rank_decorations")
+                   "appointment_dates", "service_in_rank", "court_rank_decorations")
 
 
 @dataclass(frozen=True)
@@ -149,6 +152,7 @@ BASE_COLUMNS = (
     Column("commissioning_date", "少尉任官", "Commissioned", 12, True),
     Column("rank_date", "現階級任官", "In rank since", 12, True),
     Column("prev_rank_date", "前階級任官", "Previous rank", 12, True),
+    Column("appointment_dates", "任官ノ年月日", "Appointments (Taishō)", 16, True, wrap=True),
     Column("service_in_rank", "実役停年", "Service in rank", 10, True),
     Column("court_rank_decorations", "位階勲等", "Court rank, orders", 18, True, wrap=True),
     Column("notes", "備考", "Notes", 22, True, wrap=True),
