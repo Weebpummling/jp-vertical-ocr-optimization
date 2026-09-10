@@ -383,6 +383,52 @@ def volume_progress(pid: str, cur: sqlite3.Cursor | None = None) -> list[dict]:
         return [dict(r) for r in own.fetchall()]
 
 
+def volumes_summary(cur: sqlite3.Cursor | None = None) -> list[dict]:
+    """Every registered volume, with how much of it has been read.
+
+    The page picker's first question - which volume - answered with enough to
+    choose by: the edition, how many frames it has, and how many carry readings.
+    """
+    sql = """
+            SELECT v.pid, v.title, v.series, v.edition_date,
+                   (SELECT COUNT(*) FROM source_page p
+                     WHERE p.volume_id = v.volume_id)              AS pages,
+                   (SELECT COUNT(DISTINCT p.frame_no)
+                      FROM observation o
+                      JOIN source_page p ON p.page_id = o.page_id
+                     WHERE p.volume_id = v.volume_id)              AS frames_with_readings,
+                   (SELECT COUNT(*)
+                      FROM observation o
+                      JOIN source_page p ON p.page_id = o.page_id
+                     WHERE p.volume_id = v.volume_id)              AS observations
+              FROM source_volume v
+          ORDER BY v.edition_date, v.pid
+    """
+    if cur is not None:
+        cur.execute(sql)
+        return [dict(r) for r in cur.fetchall()]
+    with read_session() as own:
+        own.execute(sql)
+        return [dict(r) for r in own.fetchall()]
+
+
+def volume_frames(pid: str, cur: sqlite3.Cursor | None = None) -> list[int]:
+    """The registered frame numbers of a volume, in order."""
+    sql = """
+            SELECT p.frame_no
+              FROM source_page p
+              JOIN source_volume v ON v.volume_id = p.volume_id
+             WHERE v.pid = ?
+          ORDER BY p.frame_no
+    """
+    if cur is not None:
+        cur.execute(sql, (pid,))
+        return [r[0] for r in cur.fetchall()]
+    with read_session() as own:
+        own.execute(sql, (pid,))
+        return [r[0] for r in own.fetchall()]
+
+
 def set_volume_edition_date(volume_id: str, edition_date, user_id: str) -> None:
     with actor_session(user_id) as cur:
         cur.execute("UPDATE source_volume SET edition_date = ? WHERE volume_id = ?",
