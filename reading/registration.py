@@ -217,19 +217,69 @@ def _ruling_masks(binary: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return horiz, vert
 
 
-def _deskew_angle(horiz: np.ndarray) -> float:
-    """Dominant angle of the long horizontal rulings, in degrees."""
-    lines = cv2.HoughLinesP(horiz, 1, np.pi / 720, threshold=200,
-                            minLineLength=horiz.shape[1] // 3, maxLineGap=20)
-    if lines is None:
-        return 0.0
-    angles = []
-    for x1, y1, x2, y2 in np.asarray(lines).reshape(-1, 4):
-        if x2 != x1:
-            a = math.degrees(math.atan2(y2 - y1, x2 - x1))
-            if abs(a) < 5:
-                angles.append(a)
-    return float(np.median(angles)) if angles else 0.0
+def _skew_score(binary: np.ndarray, angle: float) -> tuple[float, float]:
+    """How crisply the ink stacks into rows and into columns at this rotation.
+
+    The row-sum profile of a correctly deskewed table is a comb: near-empty
+    between the rulings, spiking on them. Summing the squared first difference
+    of that profile rewards exactly that shape.
+
+    Both axes are scored because both matter and they are not redundant. Scoring
+    rows alone finds an angle that is right to a tenth of a degree for the bands
+    and wrong enough for the officer rulings to lose one - which is how frame
+    100 of pid 1449426 came back with nine officers on a page that has ten. A
+    ruled table is a grid; the true angle sharpens the whole grid.
+    """
+    if angle:
+        h, w = binary.shape
+        rot = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+        binary = cv2.warpAffine(binary, rot, (w, h),
+                                flags=cv2.INTER_NEAREST, borderValue=0)
+    ink = binary > 0
+    rows = np.square(np.diff(ink.sum(axis=1).astype(np.float64))).sum()
+    cols = np.square(np.diff(ink.sum(axis=0).astype(np.float64))).sum()
+    return float(rows), float(cols)
+
+
+def _combine(scores: list[tuple[float, float]]) -> list[float]:
+    """Row and column scores are different sizes; judge each against its own best."""
+    best_rows = max((s[0] for s in scores), default=0.0) or 1.0
+    best_cols = max((s[1] for s in scores), default=0.0) or 1.0
+    return [s[0] / best_rows + s[1] / best_cols for s in scores]
+
+
+def _deskew_angle(binary: np.ndarray, *, limit: float = 2.5,
+                  coarse: float = 0.25, fine: float = 0.05) -> float:
+    """Skew of a panel in degrees, by projection-profile search.
+
+    This used to be a Hough fit over the extracted horizontal rulings, and it
+    had a circular dependency that cost half of every spread: extracting the
+    rulings runs a long horizontal opening, which a tilted panel has already
+    fragmented, so the fit was made against the wreckage of the thing it was
+    supposed to straighten. It happened to converge on the right-hand page of
+    pid 1449426 frame 60 (+0.4 deg, 11 bands found) and to fail on the left-hand
+    page of the same scan, returning +0.24 deg against a true -1.0 deg and
+    finding 4 bands out of 12. The two leaves of a bound volume tilt
+    independently, so one panel registering says nothing about the other.
+
+    Scoring candidate rotations of the *binary* image breaks the circularity:
+    nothing has to be extracted before the angle is known. Coarse sweep, then a
+    refinement pass around the winner.
+    """
+    h, w = binary.shape
+    if w > 700:  # the profile is a coarse statistic; full resolution is waste
+        binary = cv2.resize(binary, (700, max(1, int(h * 700 / w))),
+                            interpolation=cv2.INTER_NEAREST)
+
+    def best_of(angles):
+        combined = _combine([_skew_score(binary, a) for a in angles])
+        return angles[int(np.argmax(combined))]
+
+    grid = [float(a) for a in np.arange(-limit, limit + coarse / 2, coarse)]
+    around = best_of(grid)
+    refined = [float(a) for a in
+               np.arange(around - coarse, around + coarse + fine / 2, fine)]
+    return round(best_of(refined), 3)
 
 
 def _profile_lines(mask: np.ndarray, axis: int, min_run_frac: float = 0.30,
@@ -320,8 +370,7 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel) -> Grid | None:
     None when the panel has no table-like ruling structure at all.
     """
     _, binv = cv2.threshold(panel_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    horiz, _ = _ruling_masks(binv)
-    angle = _deskew_angle(horiz)
+    angle = _deskew_angle(binv)
     if abs(angle) > 0.05:
         ph, pw = panel_gray.shape
         rot = cv2.getRotationMatrix2D((pw / 2, ph / 2), angle, 1.0)
@@ -329,8 +378,7 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel) -> Grid | None:
                                     flags=cv2.INTER_LINEAR, borderValue=255)
         _, binv = cv2.threshold(panel_gray, 0, 255,
                                 cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        horiz, _ = _ruling_masks(binv)
-    _, vert = _ruling_masks(binv)
+    horiz, vert = _ruling_masks(binv)
 
     hlines = _profile_lines(horiz, axis=0)
     vlines = _profile_lines(vert, axis=1)

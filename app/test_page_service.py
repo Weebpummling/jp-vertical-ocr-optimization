@@ -182,12 +182,46 @@ class RealPageIntegrationTests(unittest.TestCase):
             self.skipTest(f"page not cached: {self.page}")
 
     def test_registers_a_known_roster_page(self):
+        """Both leaves, not one.
+
+        This asserted 10 officers until 9 Sep 2026, which was the count of the
+        right-hand leaf alone - the workstation had no way to reach the other
+        one and reported the scan finished at half its officers.
+        """
         page = PS.register_file(self.page, "1449426", 100)
         self.assertEqual(page.template_id, "showa-teinen-meibo-A")
-        self.assertEqual(len(page.officers), 10)
+        self.assertEqual(page.panels_total, 2)
+        self.assertEqual(page.panels_missing, ())
+        self.assertEqual(len(page.officers), 21)
         fields = {c.field for c in page.officers[0].cells}
         self.assertIn("seniority_no", fields)
         self.assertIn("name_raw", fields)
+
+    def test_a_spread_is_numbered_continuously_in_reading_order(self):
+        """row_index must be unique across the scan - roster_cell demands it."""
+        page = PS.register_file(self.page, "1449426", 100)
+        indices = [o.index for o in page.officers]
+        self.assertEqual(indices, list(range(len(indices))))
+        # right-hand leaf first, then the left: that is the direction of reading
+        self.assertEqual([o.panel for o in page.officers],
+                         sorted(o.panel for o in page.officers))
+        self.assertEqual(page.officers[0].panel, 0)
+        self.assertEqual(page.officers[-1].panel, 1)
+
+    def test_one_leaf_can_still_be_asked_for_by_itself(self):
+        right = PS.register_file(self.page, "1449426", 100, panel=0)
+        self.assertEqual(len(right.officers), 10)
+        self.assertEqual(right.panels_missing, (1,))
+
+    def test_a_leaf_that_will_not_register_is_reported_not_hidden(self):
+        """Half a spread read beats none - but the reader must be told."""
+        frame60 = self.page.with_name("frame_0060.jpg")
+        if not frame60.exists():
+            self.skipTest("frame 60 not cached")
+        page = PS.register_file(frame60, "1449426", 60)
+        self.assertEqual(page.panels_total, 2)
+        self.assertEqual(page.panels_missing, (1,))
+        self.assertTrue(page.officers)
 
     def test_refuses_the_index_page(self):
         index = self.page.with_name("frame_0850.jpg")

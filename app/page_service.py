@@ -22,7 +22,7 @@ Two rules from the standing commitments shape the shape of the output:
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass, field as dc_field, replace
 from pathlib import Path
 
 import cv2
@@ -64,16 +64,26 @@ class Cell:
 
 @dataclass(frozen=True)
 class Officer:
-    """One officer record - a column strip plus its fields."""
+    """One officer record - a column strip plus its fields.
+
+    `index` is the officer's position in the reading order of the whole scan,
+    which is what `roster_cell.row_index` stores. `panel` and `column` say where
+    that lands physically, for crops and for saying "third from the right on the
+    left-hand leaf" to a human.
+    """
 
     index: int
     bbox: tuple[int, int, int, int]
     cells: list[Cell]
     crop_url: str | None = None
+    panel: int = 0
+    column: int = 0
 
     def as_dict(self) -> dict:
         return {
             "index": self.index,
+            "panel": self.panel,
+            "column": self.column,
             "bbox": list(self.bbox),
             "crop_url": self.crop_url,
             "cells": [c.as_dict() for c in self.cells],
@@ -93,11 +103,24 @@ class RegisteredPage:
     bands_total: int
     explained_frac: float
     officers: list[Officer] = dc_field(default_factory=list)
+    panels_total: int = 1
+    panels_registered: tuple[int, ...] = (0,)
 
     @property
     def needs_review(self) -> bool:
         """True when any cell on the page had an edge inferred."""
         return any(c.suspect for o in self.officers for c in o.cells)
+
+    @property
+    def panels_missing(self) -> tuple[int, ...]:
+        """Leaves of this scan that carry a table but matched no template.
+
+        A reader must be told about these. A spread whose left leaf silently
+        failed looks exactly like a spread that only ever had one leaf, and the
+        page then reports itself complete at half its officers.
+        """
+        return tuple(i for i in range(self.panels_total)
+                     if i not in self.panels_registered)
 
     def as_dict(self) -> dict:
         return {
@@ -111,6 +134,9 @@ class RegisteredPage:
             "explained_frac": self.explained_frac,
             "needs_review": self.needs_review,
             "officer_count": len(self.officers),
+            "panels_total": self.panels_total,
+            "panels_registered": list(self.panels_registered),
+            "panels_missing": list(self.panels_missing),
             "officers": [o.as_dict() for o in self.officers],
         }
 
@@ -231,6 +257,8 @@ def register_image(image, pid: str, frame: int, *, panel: int = 0,
             bbox=strip,
             cells=by_officer[column],
             crop_url=url_for(pid, frame, strip) if url_for else None,
+            panel=panel,
+            column=column,
         ))
 
     return RegisteredPage(
@@ -243,12 +271,75 @@ def register_image(image, pid: str, frame: int, *, panel: int = 0,
         bands_total=len(template.band_fracs),
         explained_frac=reg.explained_frac,
         officers=officers,
+        panels_total=len(grids),
+        panels_registered=(panel,),
+    )
+
+
+def register_spread(image, pid: str, frame: int, **kwargs) -> RegisteredPage:
+    """Register every panel of a scan as one continuous reading sequence.
+
+    A roster scan is a two-page spread and both leaves carry officers, but the
+    workstation only ever asked for panel 0. That was not merely a missing
+    control: `roster_cell` is `UNIQUE (page_id, row_index)` and a page_id is a
+    frame, so registering the second leaf under its own column numbers would
+    have collided with the first leaf's rows and re-pointed live observations at
+    the wrong geometry.
+
+    Numbering the spread continuously avoids the collision without touching the
+    frozen schema, and it is not a workaround - it is what the print does.
+    Japanese reads right to left, so the right-hand leaf is read first and its
+    last column is followed by the left-hand leaf's first. The seniority numbers
+    confirm it: pid 1449426 frame 100 runs 915-930 on the right and 931-944 on
+    the left, frame 300 runs 1605-1628 then 1629-1643. Ditto chains therefore
+    resolve across the gutter, and the monotone-seniority audit spans the whole
+    scan rather than restarting halfway.
+
+    A panel that matches no template is skipped, not fatal: half a spread read is
+    better than none, and `panels_total` against `panels_registered` is what says
+    a leaf was left out - loudly, rather than by a page quietly looking finished.
+    """
+    grids = R.detect_page(image, scale=kwargs.get("scale", R.SCALE))
+    pages, officers, registered = [], [], []
+    for index in range(len(grids)):
+        try:
+            page = register_image(image, pid, frame, panel=index, **kwargs)
+        except PageNotRegistrable:
+            continue
+        pages.append(page)
+        registered.append(index)
+        for officer in page.officers:
+            officers.append(replace(officer, index=len(officers)))
+    if not pages:
+        raise PageNotRegistrable(
+            f"{pid} frame {frame}: no panel matches a template "
+            f"({len(grids)} detected)")
+    first = pages[0]
+    return RegisteredPage(
+        pid=pid,
+        frame=frame,
+        panel=first.panel,
+        template_id=first.template_id,
+        skew_deg=first.skew_deg,
+        bands_matched=min(p.bands_matched for p in pages),
+        bands_total=first.bands_total,
+        explained_frac=min(p.explained_frac for p in pages),
+        officers=officers,
+        panels_total=len(grids),
+        panels_registered=tuple(registered),
     )
 
 
 def register_file(path: str | Path, pid: str, frame: int, **kwargs) -> RegisteredPage:
-    """Register a panel from a cached page image on disk."""
+    """Register a cached page image from disk.
+
+    `panel=None` (the default) registers the whole spread; an explicit `panel`
+    registers that leaf alone.
+    """
     image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if image is None:
         raise FileNotFoundError(f"cannot read page image: {path}")
+    if kwargs.get("panel") is None:
+        kwargs.pop("panel", None)
+        return register_spread(image, pid, frame, **kwargs)
     return register_image(image, pid, frame, **kwargs)
