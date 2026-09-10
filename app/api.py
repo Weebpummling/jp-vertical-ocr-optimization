@@ -116,7 +116,7 @@ def templates() -> dict:
 def vocab() -> dict:
     """Controlled vocabularies for the entry form's autocomplete.
 
-    Frozen 31 Jul 2026 (11 ranks / 14 branches / 28 variants; 29 variants from
+    Frozen 31 Jul 2026 (11 ranks / 14 branches / 28 variants; 30 variants from
     10 Sep 2026, see data/vocab/README.md). Typing a printed
     variant must resolve to the canonical code in a keystroke or two - that is
     what keeps normalization from becoming a separate cleanup pass.

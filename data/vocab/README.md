@@ -41,11 +41,13 @@ nothing about any officer.
   that is a vocabulary change with its own migration, not a reload.
 - **The vocabularies are frozen as of this decision**: 11 ranks, 14 branches,
   28 kanji variants. Changes from here are logged, argued-for events.
-- **10 Sep 2026 - one kanji variant added (28 -> 29)**: 郞/郎. Evidence: pid
-  1449426 frame 101, officer 5 - NDL reads 太田藤太郞, NDLOCR-Lite 1.3.1 zoomed in
-  reads 太田藤太郎, and the two were offered as a disagreement when they are the
-  same name. 彥/彦 and 敎/教 were considered and not added: no case in the
-  re-readings so far (where 敎 appeared, NDL had written 〓, not the modern form).
+- **10 Sep 2026 - two kanji variants added (28 -> 30)**: 郞/郎 and 彥/彦.
+  NDLOCR-Lite 1.3.1 writes the modern form where the roster prints the old one,
+  so the same name was offered as a disagreement: pid 1449426 frame 101 officer 5
+  (NDL 太田藤太郞, zoomed 太田藤太郎) and frame 100 officer 10 (NDL 川上哲彥, zoomed
+  川上哲彦). The volume's cached NDL text prints 郞 8232 times to 郎 184, and 彥 784
+  to 彦 120. 敎/教 was considered and not added: that text mostly prints 教 already
+  (116 to 12), and where the zoomed reading gave 敎, NDL had written 〓.
 
 One coverage observation, recorded for the worklist rather than the vocabulary:
 軍醫 falls from ~2,100 (1923/1926) to 214 in the 1935 edition, 獸醫 similarly — the
