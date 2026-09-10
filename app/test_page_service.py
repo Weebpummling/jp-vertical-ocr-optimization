@@ -140,10 +140,11 @@ class VocabularyTests(unittest.TestCase):
         self.vocab = PS.vocabularies()
 
     def test_frozen_counts(self):
-        # Frozen 31 Jul 2026: 11 ranks / 14 branches / 28 variants.
+        # Frozen 31 Jul 2026: 11 ranks / 14 branches / 28 variants; 29 variants from
+        # 10 Sep 2026 (郞/郎 - logged in data/vocab/README.md).
         self.assertEqual(len(self.vocab["ranks"]), 11)
         self.assertEqual(len(self.vocab["branches"]), 14)
-        self.assertEqual(len(self.vocab["kanji_variants"]), 28)
+        self.assertEqual(len(self.vocab["kanji_variants"]), 29)
 
     def test_ranks_come_back_in_service_order(self):
         """Not alphabetical: a rank list an officer would recognise."""
