@@ -253,6 +253,20 @@ class ShippedTemplateTests(unittest.TestCase):
             self.assertLessEqual(t.min_bands_matched, len(t.band_fracs))
             self.assertGreaterEqual(t.min_columns, 2)
 
+    def test_one_layout_family_names_the_same_fields(self):
+        """Editions of one printed layout differ in where the rulings fall, never
+        in what the bands hold: a second template for a family carries the first
+        one's fields band for band, so a reading means the same thing in either."""
+        families = {}
+        for t in R.load_library(self.dir):
+            families.setdefault(t.layout_family, []).append(t)
+        for family, members in families.items():
+            first = members[0]
+            for other in members[1:]:
+                self.assertEqual(other.fields, first.fields,
+                                 f"{family}: {other.template_id} fields differ from {first.template_id}")
+                self.assertEqual(len(other.band_fracs), len(first.band_fracs))
+
     def test_every_field_declares_its_provenance(self):
         """A field name is a reading decision, so it must say who backs it.
 
