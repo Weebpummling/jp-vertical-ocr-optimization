@@ -284,6 +284,74 @@ def upsert_cells(page_id: str, officers: list[dict], user_id: str,
     return saved
 
 
+# The audit statuses a reader may set. 'extra_row' is the schema's own mark for a
+# row that is not a real entry (reading/validation.py raises it too).
+AUDIT_BY_READER = ("ok", "extra_row")
+
+
+def row_audit(page_id: str, cur: sqlite3.Cursor | None = None) -> dict[int, str]:
+    """The rows of a page whose audit status is not 'ok', by row_index."""
+    sql = ("SELECT row_index, audit_status FROM roster_cell "
+           "WHERE page_id = ? AND audit_status <> 'ok'")
+    if cur is not None:
+        cur.execute(sql, (page_id,))
+        return {r[0]: r[1] for r in cur.fetchall()}
+    with read_session() as own:
+        own.execute(sql, (page_id,))
+        return {r[0]: r[1] for r in own.fetchall()}
+
+
+def set_row_audit(page_id: str, row_index: int, status: str, user_id: str, *,
+                  volume_pid: str | None = None, frame_no: int | None = None) -> str:
+    """A reader marks a column of the grid not an officer, or undoes that.
+
+    Only that mark may be cleared this way: a sequence break or damage flag raised
+    by validation is not a reader's to wipe by calling the column an officer again,
+    and is returned untouched. Returns the status the row now has.
+    """
+    if status not in AUDIT_BY_READER:
+        raise ValueError(f"a reader may set audit_status to ok or extra_row, not {status!r}")
+    with actor_session(user_id) as cur:
+        if status == "extra_row":
+            cur.execute("UPDATE roster_cell SET audit_status = 'extra_row' "
+                        "WHERE page_id = ? AND row_index = ? RETURNING audit_status",
+                        (page_id, row_index))
+        else:
+            cur.execute("UPDATE roster_cell SET audit_status = 'ok' "
+                        "WHERE page_id = ? AND row_index = ? AND audit_status = 'extra_row' "
+                        "RETURNING audit_status", (page_id, row_index))
+        changed = cur.fetchone()
+        if changed is None:
+            cur.execute("SELECT audit_status FROM roster_cell WHERE page_id = ? AND row_index = ?",
+                        (page_id, row_index))
+            existing = cur.fetchone()
+            if existing is None:
+                raise LookupError(f"no row {row_index} on this page")
+            return existing[0]
+        log_work(cur, user_id, "mark_not_officer" if status == "extra_row" else "mark_officer",
+                 volume_pid=volume_pid, frame_no=frame_no, row_index=row_index,
+                 detail={"audit_status": status})
+        return changed[0]
+
+
+def extra_rows_by_frame(pid: str, cur: sqlite3.Cursor | None = None) -> dict[int, int]:
+    """How many columns of each frame a reader has marked not an officer."""
+    sql = """
+            SELECT p.frame_no, COUNT(*)
+              FROM roster_cell c
+              JOIN source_page p   ON p.page_id = c.page_id
+              JOIN source_volume v ON v.volume_id = p.volume_id
+             WHERE v.pid = ? AND c.audit_status = 'extra_row'
+          GROUP BY p.frame_no
+    """
+    if cur is not None:
+        cur.execute(sql, (pid,))
+        return {r[0]: r[1] for r in cur.fetchall()}
+    with read_session() as own:
+        own.execute(sql, (pid,))
+        return {r[0]: r[1] for r in own.fetchall()}
+
+
 def create_observation(*, page_id: str, cell_id: str, as_of_date, user_id: str,
                        values: dict, volume_pid: str | None = None,
                        frame_no: int | None = None, row_index: int | None = None) -> dict:
@@ -381,6 +449,52 @@ def volume_progress(pid: str, cur: sqlite3.Cursor | None = None) -> list[dict]:
     with read_session() as own:
         own.execute(sql, (pid,))
         return [dict(r) for r in own.fetchall()]
+
+
+def volumes_summary(cur: sqlite3.Cursor | None = None) -> list[dict]:
+    """Every registered volume, with how much of it has been read.
+
+    The page picker's first question - which volume - answered with enough to
+    choose by: the edition, how many frames it has, and how many carry readings.
+    """
+    sql = """
+            SELECT v.pid, v.title, v.series, v.edition_date,
+                   (SELECT COUNT(*) FROM source_page p
+                     WHERE p.volume_id = v.volume_id)              AS pages,
+                   (SELECT COUNT(DISTINCT p.frame_no)
+                      FROM observation o
+                      JOIN source_page p ON p.page_id = o.page_id
+                     WHERE p.volume_id = v.volume_id)              AS frames_with_readings,
+                   (SELECT COUNT(*)
+                      FROM observation o
+                      JOIN source_page p ON p.page_id = o.page_id
+                     WHERE p.volume_id = v.volume_id)              AS observations
+              FROM source_volume v
+          ORDER BY v.edition_date, v.pid
+    """
+    if cur is not None:
+        cur.execute(sql)
+        return [dict(r) for r in cur.fetchall()]
+    with read_session() as own:
+        own.execute(sql)
+        return [dict(r) for r in own.fetchall()]
+
+
+def volume_frames(pid: str, cur: sqlite3.Cursor | None = None) -> list[int]:
+    """The registered frame numbers of a volume, in order."""
+    sql = """
+            SELECT p.frame_no
+              FROM source_page p
+              JOIN source_volume v ON v.volume_id = p.volume_id
+             WHERE v.pid = ?
+          ORDER BY p.frame_no
+    """
+    if cur is not None:
+        cur.execute(sql, (pid,))
+        return [r[0] for r in cur.fetchall()]
+    with read_session() as own:
+        own.execute(sql, (pid,))
+        return [r[0] for r in own.fetchall()]
 
 
 def set_volume_edition_date(volume_id: str, edition_date, user_id: str) -> None:

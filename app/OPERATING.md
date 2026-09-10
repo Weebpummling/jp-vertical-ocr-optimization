@@ -50,14 +50,32 @@ Move between pages with <kbd>Alt</kbd>+<kbd>PgDn</kbd> and
 
 Once a page loads, the status line reads something like:
 
-> `showa-teinen-meibo-A` · 24 officers · 0 recorded · 11/12 bands · skew 0.4°
+> `showa-teinen-meibo-A` · 21 officers across 2 of 2 leaves · 0 recorded ·
+> 12/12 bands · skew 0.4°
 
-- **24 officers** — vertical columns the page was divided into. Each is one
-  officer, numbered from the **right**, the direction the page is read.
+- **21 officers** — vertical columns the scan was divided into. Each is one
+  officer, numbered in the order the scan is read: the **right-hand page first,
+  from its right edge**, then the left-hand page the same way.
+- **2 of 2 leaves** — a scan is a two-page spread and both pages carry
+  officers. See the warning below when this says *1 of 2*.
 - **0 recorded** — how many have been saved, including by other people.
-- **11/12 bands** — how many horizontal rulings were actually matched. One
+- **12/12 bands** — how many horizontal rulings were actually matched. One
   missing is normal; several missing usually shows up as **needs review**.
 - **skew** — how tilted the scan is. Large values are worth mentioning.
+
+### When a leaf is missing
+
+Sometimes one page of the spread will not register, and the status line says so:
+
+> · 10 officers across **1 of 2 leaves** · *the left-hand leaf did not register
+> — its officers are NOT on this page*
+
+Work the officers you have been given. **Do not treat the page as finished** —
+you will also see, once you have recorded them all, *"every officer this page can
+show is recorded — but a leaf is missing, so the page is not done"* instead of
+the usual **page complete**. Note the frame number and pass it on; a leaf that
+will not register is a template or scan problem for whoever set this up, and it
+is the one case where moving on quietly loses officers nobody will miss.
 
 ### Knowing what is left
 
@@ -84,6 +102,27 @@ Two messages mean *stop and tell someone* rather than work around them:
 |---|---|
 | "This page matches no template, so it has no officer grid" | Index pages, section dividers and badly damaged pages have no grid — this is correct behaviour, not a fault. Move to the next content page. |
 | "…is not registered in the database, so nothing can be saved yet" | The volume was never registered. **Anything you type will be lost.** Stop and get the volume registered first. |
+
+### The page list — any volume, any page
+
+**pages** in the top bar (<kbd>Alt</kbd>+<kbd>P</kbd>) lists every page of every
+registered volume, each with where it stands:
+
+| State | Means |
+|---|---|
+| **作業中 in progress** | some of its officers are recorded |
+| **未着手 not started** | a roster page nobody has recorded anything on yet |
+| **片丁未登録 leaf missing** | every officer this page can show is recorded, but one leaf did not register — **not finished** |
+| **完了 complete** | every officer on both leaves recorded |
+| **未調査 not surveyed** | not opened yet, so how many officers it holds is unknown |
+| **名簿外 not a roster page** | an index, a plate or front matter — nothing to read |
+
+`12/21` is officers recorded out of officers on the page. A **leaf missing** tag on
+a page not yet finished warns you before you start. **NDL** means the scan is not
+on this machine yet: opening it fetches it, which takes a few seconds.
+
+**next to work** jumps to the first page someone has started, or else the first
+fresh one. <kbd>Esc</kbd> closes the list.
 
 ## 4. The three panes
 
@@ -170,6 +209,86 @@ warning go away is a silent error.
 | **check crop** | An edge of this cell was inferred rather than seen. Glance at the right-hand pane — the crop may be cutting something off. |
 | **no cell** | Not a cell on the page at all (兵科, 階級, 備考). |
 
+### Machine proposals — checking instead of typing
+
+The right-hand pane lists what the machine read for this officer, from NDL's own
+OCR of the volume. Proposals are **dashed and tinted** and stay in that pane:
+nothing reaches the form until you take it.
+
+- **take** puts one proposal into its field. Look at the image first.
+- **take N** (<kbd>Alt</kbd>+<kbd>A</kbd>) takes every settled proposal into every
+  **empty** field at once. It never overwrites anything you have typed.
+- A date is taken **as printed** (明四四、一二、二六), and the server reads it.
+- A ditto is taken as **同**, and resolves against what was *recorded* for the
+  officer above. If the top of a column is unreadable, type that one date and
+  every 同 beneath it follows.
+- **not accepted** is OCR text the rules would not take — an unreadable date,
+  letters in a number. **take** still copies it, so you only fix the bad
+  character; <kbd>Alt</kbd>+<kbd>A</kbd> never takes these.
+- **context** fields (期, 現階級任官 …) have no box in the form yet. They are there
+  to read against, and they appear in the Excel export.
+
+Taking a proposal is typing it. You are still the one reading the page, and the
+officer is recorded under your id code only when you record them.
+
+### A column that is not an officer
+
+Not every column of the grid holds an officer. The last column of a left-hand
+page is often the **section label** (步兵中佐 and a number); a section that starts
+mid-page opens with a column of **headings** (次列, 氏名, 出身期別); and the end of a
+section can leave **unused slots**.
+
+When the machine reads a column that way, its number in the strip is hatched and
+the form says so. If you agree, press **not an officer** (<kbd>Alt</kbd>+<kbd>X</kbd>)
+— it stops counting toward the page, and you move on to the next officer. **mark N
+columns not an officer** on the page line does all of the suggested ones at once.
+It is recorded to you and can be undone. If the machine is wrong — it only ever
+suggests, and a column with any seniority number is never suggested — just read
+the officer as usual.
+
+### Fewer clicks
+
+- **Under every field** sit the machine readings for it: **NDL** and, where the
+  zoomed re-reading differs, **zoom**. A ✓ on NDL's means both engines read the
+  same. Click one to take it; the keyboard stays in the form.
+- **Alt+Enter** takes the settled reading for the field you are in and moves to
+  the next field. For an officer the machines read correctly, that is the whole
+  job: look, Alt+Enter, look, Alt+Enter. **Alt+1** / **Alt+2** take NDL's or the
+  zoomed reading without moving.
+- **The strip of numbers** under the officer's name is the page: green is
+  recorded, dashed is typed but not recorded, a dot means the two machine readings
+  disagree somewhere. Click a number to go there — the officer you are on is
+  recorded first.
+- When every officer is recorded, **page complete — next unread page ›** takes
+  you straight to the next page nobody has read.
+- Tick **every page I open** beside the zoom-read button and it starts by itself.
+
+Whatever you take is noted as taken, not as read by eye, so later checks can tell
+the two apart.
+
+### Zoomed re-reading — a second opinion, cell by cell
+
+**zoom-read whole page** (<kbd>Alt</kbd>+<kbd>O</kbd>) reads every cell on the page
+again with NDLOCR-Lite, NDL's current OCR, cropped to that one cell — starting
+with the officer you are on. It runs in the background, so keep working; each row
+fills in as its cell is read:
+
+- **✓ reads the same** — both readings agree. Still look, with more confidence.
+  *in the modern form* means the re-reading wrote 歩 where the page prints 步;
+  NDL's reading keeps the printed form, so take that one.
+- **NDLOCR-Lite … take** — the two readings differ. Compare both with the image
+  and take whichever the page supports.
+- **could not read it** — the re-reading gave nothing usable. Dates often land
+  here: they are small, and a reading with Arabic digits in a date column is
+  never trusted, because the rosters print dates in kanji.
+
+**zoom-read this cell** (<kbd>Alt</kbd>+<kbd>R</kbd>) under the crop, or **zoom-read**
+on any row, reads just that cell, now. The first one after starting takes a few
+seconds while NDLOCR-Lite loads.
+
+Neither reading is ever taken for you, and **take N** never takes a re-reading.
+If both are wrong, type what the page says — your reading is the one that counts.
+
 ## 6. When a character defeats you
 
 Two different problems:
@@ -234,6 +353,30 @@ format. Have a look — and if the page really says that, leave it and note it.
 If you see **not recorded:** followed by an error, the officer did **not** save.
 Try once more; if it persists, stop and report it rather than retyping the page.
 
+## 7a. Working in Excel
+
+Some reading is easier in a spreadsheet — scanning a whole page at once, sorting
+a column, working away from the workstation. At the foot of the page list,
+**export to Excel** gives a workbook with one row per officer.
+
+**The colours say where each value came from.** Plain: a person recorded it.
+Yellow: the machine read it and nobody has checked it. Blue: printed as a ditto.
+Orange: OCR text the rules would not accept — correct it. Italic: a cell edge was
+inferred, so check the image. Hover any cell for what was actually read; the
+凡例 Legend tab has the whole key.
+
+- **画像 strip** opens that officer's strip of the scan.
+- **作業画面 open** opens that officer in the workstation, image beside the form.
+- **Type over anything wrong.** Changed cells turn white and bold. Sorting and
+  filtering are fine.
+- **Checked an officer and found it right?** Write **ok** in 備考. Without it,
+  machine values you did not change are *not* recorded as yours — only what you
+  changed is.
+
+When you are done, hand the workbook to whoever set the workstation up. They send
+it back to the record under **your** id code, through exactly the same checks as
+the form.
+
 ## 8. Rough edges, and how to work around them
 
 Known and being fixed. Until then:
@@ -273,15 +416,51 @@ cannot be worked on:
 python ingestion/iiif_client.py fetch 1449426 100   # ~1.5 s per page, resumable
 ```
 
-Then, two terminals:
+Then start it — one command, one address:
 
 ```bash
-uvicorn app.api:app --reload --port 8000
-npm --prefix app/ui run dev            # → http://localhost:5173
+python scripts/workstation.py --open    # → http://127.0.0.1:8000
 ```
 
-Check `http://localhost:8000/health` — it should answer
+That serves the built UI from `app/ui/dist` beside the API under `/api`; pass
+`--build` to rebuild the UI first on a machine with node. Check
+`http://127.0.0.1:8000/api/health` — it should answer
 `{"status":"ok","templates":["showa-teinen-meibo-A"]}`.
+
+The page list knows how many officers a page holds once the page has been opened
+or surveyed. To fill that in ahead of the readers:
+
+```bash
+python scripts/survey_volume.py 1449426                        # pages already cached
+python scripts/survey_volume.py 1449426 --first 90 --last 130 --fetch
+```
+
+Zoomed re-reading needs NDLOCR-Lite as a git checkout with its own venv — by
+default in `%LOCALAPPDATA%\ndlocr-lite`, or wherever `NDLOCR_LITE_HOME` points
+(NDL Workbench's **Install NDLOCR-Lite…** sets exactly that up). Without it the
+workstation works as before and the re-read buttons say why they are unavailable.
+Re-readings are kept in `cache/<pid>/cell_ocr/`, keyed to the cell, the crop
+recipe and the NDLOCR-Lite release, so a new release reads again rather than
+mixing results.
+
+Workbooks can also be exported from the command line, including pages not yet
+cached (`--fetch`) and with each officer's name crop embedded (`--images`):
+
+```bash
+python scripts/export_worksheet.py 1449426 95-110 --images
+```
+
+A reader's corrections go back into the record under the reader's code, not
+yours. The first run only shows what would be recorded:
+
+```bash
+python scripts/import_worksheet.py <workbook> --code <reader's id code>
+python scripts/import_worksheet.py <workbook> --code <reader's id code> --apply
+```
+
+Working on the UI itself is still two processes: `uvicorn app.api:app --port
+8000` and `npm --prefix app/ui run dev` (→ `http://localhost:5173`). No
+`--reload`: stopping a reloading server orphans the child holding the port.
 
 **If this ever leaves `127.0.0.1`, put it behind TLS or a tunnel.** The id code
 is a bearer token: anyone holding it can record work as its owner.

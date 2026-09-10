@@ -24,6 +24,7 @@ that uses them is [`reading/registration.py`](../reading/registration.py); tests
 | Artifact | Layout family | Derived from |
 |---|---|---|
 | `showa-teinen-meibo-A.json` | Shōwa main roster table (現役将校実役停年名簿) | pid 1449426 (昭和8年調), 7 panels across frames 60–700 |
+| `showa-teinen-meibo-B.json` | same layout, 1935 edition: rulings sit lower, past A's tolerance; fields carried over from A, unconfirmed on this edition | pid 1449474 (昭和10年調), 8 panels across frames 100–700 |
 
 **Reading a template.** `band_fracs` are horizontal ruling positions as fractions of table
 height. `fields` name the space *between* two bands by index, so a field's edges follow the

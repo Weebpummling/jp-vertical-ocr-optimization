@@ -108,6 +108,35 @@ def parse(text: str, *, context_era: str | None = None) -> Parsed:
     return Parsed(value=value)
 
 
+# The span the three eras cover. An ISO date outside it is a typing slip, not a
+# date these rosters could print.
+ISO_SPAN = (date(1868, 1, 25), date(1989, 1, 7))
+
+
+def parse_reading(text: str, *, context_era: str | None = None) -> Parsed:
+    """A date as a reader supplies it: era notation, or an unambiguous ISO date.
+
+    The workstation form takes the page as printed, and that stays the primary
+    route. But a reader correcting the reading worksheet works with the dates
+    the sheet shows - 1910-12-26 - and a spreadsheet may hand them back as that
+    text or as a date value it parsed itself. Year-month-day has exactly one
+    reading, so accepting it is not guessing; it is still held to the Meiji to
+    Showa span, and anything that is not a real calendar date is refused.
+    """
+    s = (text or "").strip()
+    if (len(s) == 10 and s[4] == "-" and s[7] == "-"
+            and s[:4].isdigit() and s[5:7].isdigit() and s[8:].isdigit()):
+        try:
+            value = date.fromisoformat(s)
+        except ValueError:
+            return Parsed(reason=f"not a real date: {text!r}")
+        low, high = ISO_SPAN
+        if not low <= value <= high:
+            return Parsed(reason=f"{value.isoformat()} falls outside the Meiji-Showa span")
+        return Parsed(value=value)
+    return parse(text, context_era=context_era)
+
+
 def _split(s: str) -> list[str]:
     parts, cur = [], ""
     for ch in s:

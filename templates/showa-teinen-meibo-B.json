@@ -1,0 +1,113 @@
+{
+  "template_id": "showa-teinen-meibo-B",
+  "layout_family": "showa_seniority_main",
+  "series": "active",
+  "era": "showa",
+  "description": "1935 (昭和10年9月1日調) edition of the main roster table of the Shōwa 現役将校実役停年名簿. Officers run right-to-left as vertical column strips; the eleven horizontal bands are the field rows. Sections are headed by branch+rank (e.g. 歩兵大佐) printed in the outer margin, so a page may contain the tail of one section and the head of the next.",
+
+  "provenance": {
+    "derived_from_pid": "1449474",
+    "edition": "昭和10年9月1日調",
+    "frames_sampled": [60, 100, 300, 500, 700, 850],
+    "panels_used": 8,
+    "method": "Same printed layout as showa-teinen-meibo-A, but every ruling below the top sits lower in the table (up to 0.020 of its height at the cohort rows), past A's 0.015 tolerance, so no 1935 panel registered against A. Ruling positions detected per panel (reading/registration.py); each of A's twelve band indices took the nearest detected ruling within 0.03 on each panel; band = median. Supports 5-8 of 8 panels, spread <= 0.011. Frame 60 (歩兵大佐, a true roster page) was left out: its multi-line posts add 9-11 spurious rulings. Frame 850 (名簿索引) detects no grid - negative control.",
+    "derived_on": "2026-09-10",
+    "field_labels": "Fields, bands and evidence carried over from showa-teinen-meibo-A, whose labels the lead confirmed 1 Aug 2026 on the 1933 edition. The 1935 pages print the same bands in the same order (frames 60, 100, 300, 500, 700 compared by eye), but nobody has confirmed them on this edition, so every field is marked unconfirmed until the lead does."
+  },
+
+  "band_fracs": [0.0, 0.1029, 0.1911, 0.265, 0.3389, 0.4152, 0.4431, 0.6372, 0.7409, 0.9315, 0.961, 1.0],
+
+  "match": {
+    "tolerance_frac": 0.015,
+    "min_bands_matched": 10,
+    "min_explained_frac": 0.8,
+    "min_columns": 2,
+    "note": "Same three gates and values as showa-teinen-meibo-A. Measured on the 1935 samples: B matches 9-12 of 12 bands with 81-100% explained on roster panels, where A matched 7-10 with 52-91% - so A rejected every 1935 panel and B takes both leaves of frames 100, 300 and 700. Known misses, left as misses rather than loosening a gate: frame 500 right leaf matches 9/12 (thin rulings), frame 60 left leaf is over-detected by multi-line posts (70% explained). The 1933 cached frames (27) register exactly as before, all to A."
+  },
+
+  "columns": {
+    "expected": 10,
+    "direction": "rtl",
+    "note": "Nominal count only, never a gate: a page ending one branch+rank section and starting another carries fewer full columns. Officer index 0 is the rightmost strip."
+  },
+
+  "fields": [
+    {
+      "name": "service_in_rank",
+      "band": [1, 2],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "実役停年 — elapsed service in the current rank as 年・月・日. NOT a date: do not parse with reading/eradate.py. Derived from band [2,3] and the volume's 調 date: the 砲兵少尉 section reads 一、一〇、七 against an appointment of 昭和6年10月26日 and a 調 date of 昭和8年9月1日 (1y 10m ~6d); the 歩兵大佐 section reads 〇、一、一. Dittoed section-wide because it is a function of the shared appointment date. Confirmed by the lead 1 Aug 2026."
+    },
+    {
+      "name": "rank_date",
+      "band": [2, 3],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "現階級任官年月日 — appointment to the officer's current rank; the seniority basis for the section. The 砲兵少尉 (cohort 43) section reads 昭和6年10月26日, exactly the 43rd 士官候補生 class date printed in the volume's own front matter (frame 9). Dittoed section-wide where a cohort was promoted together. No observation column exists for it yet. Confirmed by the lead 1 Aug 2026."
+    },
+    {
+      "name": "prev_rank_date",
+      "band": [3, 4],
+      "confirmed": false,
+      "evidence": "inferred",
+      "maps_to": null,
+      "note": "前階級任官年月日 — appointment to the PREVIOUS rank. Accepted by the lead on review 1 Aug 2026, but on STRUCTURAL INFERENCE ONLY: per-officer 昭和-era dates in the 歩兵大佐 section and entirely blank in the 少尉 section, which is how a previous-rank column must look for officers never promoted. No printed legend defines it and no cross-check was found; 補職年月日 remains a possible alternative. This is the field to revisit first if a contradicting record turns up — its provenance is weaker than the other three."
+    },
+    {
+      "name": "commissioning_date",
+      "band": [4, 5],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.commissioning_date",
+      "note": "少尉任官年月日 — first commissioning; the schema's 任官年月日. Within the 歩兵大佐 section the value tracks the cohort field exactly (cohort 22 → 明43.12.26, cohort 23 → 明44.12.26, ties printed as 同), matching the one-class-per-year cadence of the front-matter class table. Blank in the 少尉 section, where it would merely repeat band [2,3]. Confirmed by the lead 1 Aug 2026."
+    },
+    {
+      "name": "seniority_no",
+      "band": [5, 6],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.seniority_no",
+      "note": "Arabic numerals, monotone ascending right-to-left within each branch+rank section (globally numbered, so sections start with gaps). The row anchor for audit — see roster_cell.seniority_no."
+    },
+    {
+      "name": "post",
+      "band": [6, 7],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.post",
+      "note": "職名 — the assignment (e.g. 歩兵第四十二聯隊附, 陸軍兵器本廠附), with the posting date in smaller type at the foot of the cell. Tallest band."
+    },
+    {
+      "name": "court_rank_decorations",
+      "band": [7, 8],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "位階・勲等・功級 — e.g. 正六、旭六、瑞五 (Senior Sixth Rank; Rising Sun 6th; Sacred Treasure 5th). No observation column yet."
+    },
+    {
+      "name": "name_raw",
+      "band": [8, 9],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": "observation.name_raw",
+      "note": "氏名 in large type with the birth date in smaller type alongside (e.g. 伊東武夫 / 明三〇、七、六). Transcription must separate the two; the band holds both."
+    },
+    {
+      "name": "cohort",
+      "band": [9, 10],
+      "confirmed": false,
+      "evidence": "documentary",
+      "maps_to": null,
+      "note": "陸軍士官学校 class number (期), e.g. 23. A Spike-D blocking key for linkage to the academy dataset."
+    }
+  ],
+
+  "unassigned_bands": [
+    {"band": [0, 1], "note": "Top margin above the table rule — no field."},
+    {"band": [10, 11], "note": "Bottom margin — no field. Page number sits outside the table in the outer margin."}
+  ]
+}

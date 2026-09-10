@@ -136,6 +136,8 @@ export function buildObservation(
   vocab: Vocab | null,
   /** field key → IIIF URL of the crop it was read from, for re-checking. */
   cropUrls: Record<string, string | null> = {},
+  /** field key → the machine reading the reader took ("ndl" | "ndlocr-lite"). */
+  taken: Record<string, string> = {},
 ): ObservationIn {
   const confidence: Record<string, Refusal | Unreadable> = {};
 
@@ -213,6 +215,9 @@ export function buildObservation(
         ? ""
         : trimmed(values, "commissioning_date")) || null,
     notes: trimmed(values, "notes") || null,
-    field_confidence: confidence,
+    // Which values were taken from a machine reading rather than read
+    // independently. Agreement between readers and machines is only evidence
+    // when the two are told apart.
+    field_confidence: Object.keys(taken).length ? { ...confidence, taken } : confidence,
   };
 }

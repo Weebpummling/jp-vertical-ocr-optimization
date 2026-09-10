@@ -10,6 +10,11 @@ numpy>=1.26
 fastapi>=0.115
 uvicorn>=0.30
 
+# Reading worksheet export (app/worksheet.py). Pillow is needed only for
+# --images, which embeds each officer's name crop in the workbook.
+openpyxl>=3.1
+Pillow>=10
+
 # The database itself needs nothing: it is a SQLite file, and sqlite3 ships with
 # Python. scripts/migrate_from_postgres.py is the one exception and is one-shot -
 # `pip install "psycopg[binary]"` if you ever need to re-run it.

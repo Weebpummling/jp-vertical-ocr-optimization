@@ -10,6 +10,7 @@ should in original-scan coordinates.
 
 import unittest
 
+import cv2
 import numpy as np
 
 import registration as R
@@ -252,6 +253,20 @@ class ShippedTemplateTests(unittest.TestCase):
             self.assertLessEqual(t.min_bands_matched, len(t.band_fracs))
             self.assertGreaterEqual(t.min_columns, 2)
 
+    def test_one_layout_family_names_the_same_fields(self):
+        """Editions of one printed layout differ in where the rulings fall, never
+        in what the bands hold: a second template for a family carries the first
+        one's fields band for band, so a reading means the same thing in either."""
+        families = {}
+        for t in R.load_library(self.dir):
+            families.setdefault(t.layout_family, []).append(t)
+        for family, members in families.items():
+            first = members[0]
+            for other in members[1:]:
+                self.assertEqual(other.fields, first.fields,
+                                 f"{family}: {other.template_id} fields differ from {first.template_id}")
+                self.assertEqual(len(other.band_fracs), len(first.band_fracs))
+
     def test_every_field_declares_its_provenance(self):
         """A field name is a reading decision, so it must say who backs it.
 
@@ -271,6 +286,49 @@ class ShippedTemplateTests(unittest.TestCase):
                 if field["confirmed"]:
                     self.assertIn(field.get("evidence"), ("documentary", "inferred"),
                                   f"{where} is confirmed but declares no evidence basis")
+
+
+class DeskewTests(unittest.TestCase):
+    """The two leaves of a bound volume tilt independently.
+
+    Deskew used to be a Hough fit over the *extracted* horizontal rulings, and
+    extracting them runs a long horizontal opening that a tilted panel has
+    already fragmented - so the estimate was made against the wreckage of the
+    thing it was meant to straighten. It converged on the right-hand page of pid
+    1449426 frame 60 and failed on the left-hand page of the same scan, which
+    cost every officer on that leaf. These pin the recovery, not the estimator.
+    """
+
+    @staticmethod
+    def tilted(angle: float) -> np.ndarray:
+        panel = make_panel()
+        h, w = panel.shape
+        rot = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+        return cv2.warpAffine(panel, rot, (w, h),
+                              flags=cv2.INTER_LINEAR, borderValue=255)
+
+    def recovered(self, angle: float) -> float:
+        panel = self.tilted(angle)
+        _, binv = cv2.threshold(panel, 0, 255,
+                                cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        return R._deskew_angle(binv)
+
+    def test_recovers_a_tilt_in_either_direction(self):
+        """The returned angle is the correction, so it opposes the tilt."""
+        for angle in (-1.5, -1.0, -0.5, 0.5, 1.0, 1.5):
+            with self.subTest(angle=angle):
+                self.assertAlmostEqual(self.recovered(angle), -angle, delta=0.15)
+
+    def test_a_square_panel_is_left_alone(self):
+        self.assertAlmostEqual(self.recovered(0.0), 0.0, delta=0.1)
+
+    def test_a_tilted_panel_still_yields_its_whole_grid(self):
+        """The regression that mattered: bands and columns survive the tilt."""
+        square = R.detect_grid(make_panel(), R.Panel(0, 0, PANEL_W, PANEL_H))
+        tilted = R.detect_grid(self.tilted(-1.0), R.Panel(0, 0, PANEL_W, PANEL_H))
+        self.assertIsNotNone(tilted)
+        self.assertEqual(len(tilted.band_ys), len(square.band_ys))
+        self.assertEqual(tilted.n_officer_columns, square.n_officer_columns)
 
 
 if __name__ == "__main__":

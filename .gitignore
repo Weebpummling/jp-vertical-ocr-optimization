@@ -82,3 +82,9 @@ desktop.ini
 # Belt and braces: never track it if that happens again.
 /Users*/
 /C:*/
+
+# The built workstation UI IS committed: the office machine has no node, so a
+# checkout must run `python scripts/workstation.py` as it stands. CI rebuilds it
+# and fails if the committed copy is stale.
+!app/ui/dist/
+!app/ui/dist/**
