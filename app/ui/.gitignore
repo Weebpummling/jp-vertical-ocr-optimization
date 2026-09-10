@@ -1,2 +1,2 @@
 node_modules/
-dist/
+# dist/ is committed - see the root .gitignore

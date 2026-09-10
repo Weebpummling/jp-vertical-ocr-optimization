@@ -30,3 +30,14 @@ jobs:
         run: python -m unittest discover -s reading -p "test_*.py" -v
       - name: Workstation unit tests
         run: python -m unittest discover -s app -p "test_*.py" -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Committed UI build is current
+        # app/ui/dist is committed so a machine without node can run the
+        # workstation. Rebuild it and fail if the committed copy differs.
+        run: |
+          npm --prefix app/ui ci
+          npm --prefix app/ui run build
+          git status --porcelain app/ui/dist
+          test -z "$(git status --porcelain app/ui/dist)"
