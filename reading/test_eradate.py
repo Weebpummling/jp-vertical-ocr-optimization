@@ -68,5 +68,33 @@ class FlaggedNotGuessed(unittest.TestCase):
             self.assertTrue((p.value is None) != (p.reason is None))
 
 
+import eradate as eradate_module  # noqa: E402
+
+
+class ReadingTests(unittest.TestCase):
+    """parse_reading: what a reader hands back from the worksheet."""
+
+    def test_an_iso_date_is_taken_as_read(self):
+        got = eradate_module.parse_reading("1910-12-26")
+        self.assertEqual(got.value.isoformat(), "1910-12-26")
+
+    def test_era_notation_still_goes_through_the_era_parser(self):
+        got = eradate_module.parse_reading("明四三、一二、二六")
+        self.assertEqual(got.value.isoformat(), "1910-12-26")
+
+    def test_an_impossible_iso_date_is_refused_not_rounded(self):
+        got = eradate_module.parse_reading("1910-02-30")
+        self.assertFalse(got.ok)
+        self.assertIn("not a real date", got.reason)
+
+    def test_an_iso_date_outside_the_eras_is_refused(self):
+        for text in ("1860-01-01", "2026-09-09"):
+            with self.subTest(text=text):
+                self.assertFalse(eradate_module.parse_reading(text).ok)
+
+    def test_something_iso_shaped_but_loose_is_not_guessed_at(self):
+        self.assertFalse(eradate_module.parse_reading("1910-1-26").ok)
+
+
 if __name__ == "__main__":
     unittest.main()

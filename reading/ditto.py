@@ -31,6 +31,24 @@ DITTO_MARKS = frozenset("同仝〃〆″”")
 DITTOABLE = ("seniority_no", "name_raw", "rank_code", "branch_code",
              "post", "commissioning_date")
 
+# The *printed* columns a ditto may be resolved against, named as the template
+# names them. Deliberately a different set from DITTOABLE, which lists the
+# observation columns the workstation writes and is used as a database column
+# whitelist. The page dittos more than the schema records: the roster prints 同
+# down 実役停年, 現階級任官年月日 and 前階級任官年月日, and the template's own
+# notes say so ("dittoed section-wide because it is a function of the shared
+# appointment date"), but none of the three has an observation column yet.
+#
+# Refusing those as unditto-able cost 70 of 204 date proposals on four sample
+# pages - not because the page was unclear, but because a whitelist written for
+# the write path was being asked a question about the print.
+#
+# 陸軍士官学校 class number is in the set on the evidence of the print: the
+# roster dittos it 32 times across four sample pages, using 〃 rather than the
+# 同 the date columns use. Both are ditto marks and both mean the row above.
+DITTOABLE_FIELDS = ("service_in_rank", "rank_date", "prev_rank_date",
+                    "commissioning_date", "post", "cohort")
+
 
 def is_ditto(text: str | None) -> bool:
     """True when a cell says 'same as above' rather than stating a value."""
