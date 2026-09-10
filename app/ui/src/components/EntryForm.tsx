@@ -15,7 +15,7 @@
  * compositionend with isComposing already false.
  */
 import { useEffect, useRef, useState } from "react";
-import type { Cell, Vocab, VocabEntry } from "../api";
+import type { Cell, CellReading, FieldProposal, Vocab, VocabEntry } from "../api";
 import { resolveVocab, suggestVocab } from "../api";
 import { DITTO, GETA, type SaveState, type Values } from "../observation";
 import { DifficultCharacter } from "./DifficultCharacter";
@@ -53,6 +53,21 @@ export const FIELDS: FieldSpec[] = [
 
 export type { Values };
 
+/** What a field could take in place: NDL's reading, and the zoomed re-reading. */
+export interface FieldSuggestion {
+  ndl?: FieldProposal;
+  reading?: CellReading;
+}
+
+/** One officer on the page, for the strip. */
+export interface OfficerState {
+  recorded: boolean;
+  typed: boolean;
+  failed: boolean;
+  /** The two machine readings disagree somewhere on this officer. */
+  differs: boolean;
+}
+
 interface Props {
   officerIndex: number;
   officerCount: number;
@@ -70,6 +85,17 @@ interface Props {
   isLastOfficer?: boolean;
   /** Set when what is on screen is a reading already on record, not this session's typing. */
   recordedBy?: string;
+  suggestions: Record<string, FieldSuggestion>;
+  /** Take a machine reading into a field; `source` is "ndl" or "ndlocr-lite". */
+  onTake: (key: string, fill: string, source: string) => void;
+  officerStates: OfficerState[];
+  /** Record the officer in hand, then open officer `index`. */
+  onJump: (index: number) => void;
+  /** Changes whenever focus should return to the active field. */
+  focusTick: number;
+  pageComplete: boolean;
+  nextPageLabel: string | null;
+  onNextPage: () => void;
 }
 
 export function EntryForm({
@@ -86,6 +112,14 @@ export function EntryForm({
   saveState,
   isLastOfficer,
   recordedBy,
+  suggestions,
+  onTake,
+  officerStates,
+  onJump,
+  focusTick,
+  pageComplete,
+  nextPageLabel,
+  onNextPage,
 }: Props) {
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const composing = useRef(false);
@@ -95,7 +129,7 @@ export function EntryForm({
 
   useEffect(() => {
     inputs.current[activeField]?.focus();
-  }, [activeField, officerIndex]);
+  }, [activeField, officerIndex, focusTick]);
 
   // Restore the caret after a toolkit insert, once the new value is on screen.
   useEffect(() => {
@@ -159,6 +193,39 @@ export function EntryForm({
       insertGeta(spec.key);
       return;
     }
+    // Taking a reading from the keyboard. Alt+Enter is the check-and-move-on key:
+    // the settled reading for this field (NDL's, or the zoomed one where only it
+    // is settled), then the next field - so a correct officer is a run of
+    // Alt+Enter. Alt+Shift is avoided: on Windows it switches input language.
+    if (e.altKey && e.key === "Enter") {
+      e.preventDefault();
+      const sug = suggestions[spec.key];
+      if (sug?.ndl?.wholesale && sug.ndl.fill != null) {
+        onTake(spec.key, sug.ndl.fill, "ndl");
+      } else if (
+        sug?.reading?.status === "alternative" &&
+        sug.reading.rerun.wholesale &&
+        sug.reading.rerun.fill != null
+      ) {
+        onTake(spec.key, sug.reading.rerun.fill, "ndlocr-lite");
+      }
+      move(1);
+      return;
+    }
+    if (e.altKey && (e.key === "1" || e.key === "2")) {
+      const sug = suggestions[spec.key];
+      const pick =
+        e.key === "1"
+          ? sug?.ndl
+          : sug?.reading?.status === "alternative"
+            ? sug.reading.rerun
+            : undefined;
+      if (pick?.fill != null) {
+        e.preventDefault();
+        onTake(spec.key, pick.fill, e.key === "1" ? "ndl" : "ndlocr-lite");
+      }
+      return;
+    }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();      // record without leaving the field
       onCommit();
@@ -197,6 +264,65 @@ export function EntryForm({
     }
   };
 
+  // The machine readings for a field, where the eye already is. A click takes one
+  // without taking the keyboard away from the form.
+  const chips = (spec: FieldSpec) => {
+    const sug = suggestions[spec.key];
+    if (!sug) return null;
+    const typed = values[spec.key] ?? "";
+    const ndlFill = sug.ndl?.fill ?? null;
+    const alt = sug.reading?.status === "alternative" ? sug.reading.rerun : null;
+    if (ndlFill == null && alt?.fill == null) return null;
+    return (
+      <div className="chips-inline">
+        {ndlFill != null && (
+          <button
+            type="button"
+            className={
+              "sug sug--ndl" +
+              (sug.ndl?.wholesale ? "" : " sug--unsettled") +
+              (typed === ndlFill ? " sug--taken" : "")
+            }
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onTake(spec.key, ndlFill, "ndl")}
+            title={
+              sug.ndl?.wholesale
+                ? "NDL's reading - click or Alt+1 to take it"
+                : `NDL's reading, not accepted: ${sug.ndl?.note ?? ""} (Alt+1)`
+            }
+          >
+            <span className="sug__src">NDL</span>
+            {ndlFill}
+            {sug.reading?.status === "agrees" && (
+              <span
+                className="sug__agree"
+                title={
+                  sug.reading.variant_only
+                    ? "NDLOCR-Lite reads the same, in the modern form"
+                    : "NDLOCR-Lite, zoomed in, reads the same"
+                }
+              >
+                ✓
+              </span>
+            )}
+          </button>
+        )}
+        {alt?.fill != null && (
+          <button
+            type="button"
+            className={"sug sug--alt" + (typed === alt.fill ? " sug--taken" : "")}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onTake(spec.key, alt.fill as string, "ndlocr-lite")}
+            title="NDLOCR-Lite's zoomed reading, which differs - click or Alt+2 to take it"
+          >
+            <span className="sug__src">zoom</span>
+            {alt.fill}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   const vocabEntries = (spec: FieldSpec): VocabEntry[] =>
     spec.vocab ? (vocab?.[spec.vocab] ?? []) : [];
 
@@ -207,10 +333,44 @@ export function EntryForm({
           Officer {officerIndex + 1}
           <span className="muted"> / {officerCount}</span>
         </h2>
+        {officerStates.length > 1 && (
+          <ol className="strip" aria-label="Officers on this page">
+            {officerStates.map((state, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  className={[
+                    "strip__o",
+                    i === officerIndex ? "strip__o--here" : "",
+                    state.recorded ? "strip__o--done" : "",
+                    state.typed ? "strip__o--typed" : "",
+                    state.failed ? "strip__o--failed" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onJump(i)}
+                  aria-current={i === officerIndex ? "true" : undefined}
+                  title={
+                    `Officer ${i + 1}` +
+                    (state.recorded ? " · recorded" : state.typed ? " · typed, not recorded" : "") +
+                    (state.failed ? " · last save failed" : "") +
+                    (state.differs ? " · the two machine readings differ" : "")
+                  }
+                >
+                  {i + 1}
+                  {state.differs && <span className="strip__dot" aria-hidden="true" />}
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
         <p className="keys">
-          <kbd>Enter</kbd> next field · <kbd>Alt</kbd>+<kbd>↓</kbd>/<kbd>↑</kbd> next/prev
-          officer · <kbd>Alt</kbd>+<kbd>PgDn</kbd>/<kbd>PgUp</kbd> next/prev page ·{" "}
-          <kbd>Alt</kbd>+<kbd>G</kbd> can’t read a character
+          <kbd>Alt</kbd>+<kbd>Enter</kbd> take reading &amp; next ·{" "}
+          <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd> take NDL / zoom · <kbd>Enter</kbd> next
+          field · <kbd>Alt</kbd>+<kbd>↓</kbd>/<kbd>↑</kbd> officer ·{" "}
+          <kbd>Alt</kbd>+<kbd>PgDn</kbd>/<kbd>PgUp</kbd> page · <kbd>Alt</kbd>+<kbd>G</kbd>{" "}
+          can’t read a character
         </p>
         {recordedBy && (
           <p className="already">
@@ -281,6 +441,8 @@ export function EntryForm({
                 onKeyDown={(e) => onKeyDown(e, spec)}
               />
 
+              {chips(spec)}
+
               {activeField === spec.key && (
                 <DifficultCharacter
                   value={typed}
@@ -345,6 +507,11 @@ export function EntryForm({
           </span>
         </div>
 
+        {pageComplete && nextPageLabel && (
+          <button type="button" className="save__next" onClick={onNextPage}>
+            page complete — {nextPageLabel} ›
+          </button>
+        )}
         {saveState?.state === "saved" && (
           <p className="save__ok">
             recorded as a draft

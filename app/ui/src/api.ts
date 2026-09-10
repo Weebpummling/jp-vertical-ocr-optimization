@@ -20,7 +20,12 @@ export interface Cell {
 }
 
 export interface Officer {
-  index: number; // 0 = rightmost strip, i.e. first in reading order
+  /** Position in the reading order of the whole scan; this is row_index. */
+  index: number;
+  /** Which leaf: 0 = right-hand page, read first. */
+  panel: number;
+  /** Position within that leaf; 0 = rightmost strip. */
+  column: number;
   bbox: Bbox;
   crop_url: string | null;
   cells: Cell[];
@@ -37,6 +42,11 @@ export interface RegisteredPage {
   explained_frac: number;
   needs_review: boolean;
   officer_count: number;
+  /** Leaves detected on this scan - a roster spread has two. */
+  panels_total: number;
+  panels_registered: number[];
+  /** Leaves that carry a table but matched no template. Must be surfaced. */
+  panels_missing: number[];
   officers: Officer[];
   iiif_service: string | null;
 }
@@ -139,9 +149,16 @@ export const regionUrl = (pid: string, frame: number, [x, y, w, h]: Bbox) =>
   `${BASE}/volumes/${encodeURIComponent(pid)}/pages/${frame}/region` +
   `?x=${x}&y=${y}&w=${w}&h=${h}`;
 
-export const fetchPage = (pid: string, frame: number, panel = 0) =>
+/**
+ * The whole scan - both leaves of the spread, numbered in reading order.
+ *
+ * This used to send `panel=0` and there was no control that sent anything else,
+ * so the left-hand leaf of every scan went unread and a half-read page reported
+ * itself complete.
+ */
+export const fetchPage = (pid: string, frame: number) =>
   get<RegisteredPage>(
-    `/volumes/${encodeURIComponent(pid)}/pages/${frame}?panel=${panel}&crop_urls=true`,
+    `/volumes/${encodeURIComponent(pid)}/pages/${frame}?crop_urls=true`,
   );
 
 // --------------------------------------------------------------------------
@@ -197,9 +214,9 @@ export interface PageObservation {
  * Idempotent, and a precondition for saving: an observation hangs off a cell,
  * so the first save on a page does this once.
  */
-export const createCells = (pid: string, frame: number, panel = 0) =>
+export const createCells = (pid: string, frame: number) =>
   send<{ page_id: string; cells: unknown[] }>(
-    `/volumes/${encodeURIComponent(pid)}/pages/${frame}/cells?panel=${panel}`,
+    `/volumes/${encodeURIComponent(pid)}/pages/${frame}/cells`,
     { method: "POST" },
   );
 
@@ -233,6 +250,182 @@ export interface VolumeProgress {
 
 export const fetchVolumeProgress = (pid: string) =>
   get<VolumeProgress>(`/volumes/${encodeURIComponent(pid)}/progress`);
+
+// --------------------------------------------------------------------------
+// volumes and page completeness
+// --------------------------------------------------------------------------
+
+export interface VolumeSummary {
+  pid: string;
+  title: string;
+  series: string | null;
+  edition_date: string | null;
+  pages: number;
+  frames_with_readings: number;
+  observations: number;
+  surveyed: number;
+  cached: number;
+  officers_known: number;
+  ocr_cached: boolean;
+}
+
+/** See app/volume_service.py. `leaf_missing` is never a kind of complete. */
+export type PageStatusName =
+  | "unsurveyed"
+  | "not_roster"
+  | "not_started"
+  | "in_progress"
+  | "leaf_missing"
+  | "complete";
+
+export interface PageStatus {
+  frame: number;
+  status: PageStatusName;
+  /** Officers the scan holds; null until the page has been surveyed. */
+  officers: number | null;
+  rows_read: number;
+  leaf_missing: boolean;
+  needs_review: boolean;
+  /** Page image on this machine; opening an uncached page fetches it from NDL. */
+  cached: boolean;
+  last_touched: string | null;
+  reason?: string;
+}
+
+export interface VolumePages {
+  pid: string;
+  frames_total: number;
+  surveyed: number;
+  cached: number;
+  officers_known: number;
+  rows_read: number;
+  counts: Record<PageStatusName, number>;
+  pages: PageStatus[];
+}
+
+export const fetchVolumes = () => get<{ volumes: VolumeSummary[] }>("/volumes");
+
+export const fetchPageStatuses = (pid: string) =>
+  get<VolumePages>(`/volumes/${encodeURIComponent(pid)}/pages`);
+
+// --------------------------------------------------------------------------
+// machine proposals
+// --------------------------------------------------------------------------
+
+export interface FieldProposal {
+  value: string | null;
+  /** Exactly what NDL's OCR read in the cell. */
+  raw: string;
+  method: "ndl-ocr" | "digits" | "eradate" | "inherited" | "refused" | "blank";
+  note: string;
+  suspect: boolean;
+  /** What a form field receives if the reader takes it: dates as printed, dittos as 同. */
+  fill: string | null;
+  /** The form field this can fill; null when the form has no column for it yet. */
+  form_key: string | null;
+  /** Whether "take all" may use it - settled readings and printed ditto marks only. */
+  wholesale: boolean;
+}
+
+export interface OfficerProposals {
+  index: number;
+  panel: number;
+  column: number;
+  /** The small-type birth date read beside the name. */
+  birth_raw: string;
+  fields: Record<string, FieldProposal>;
+}
+
+export interface PageProposals {
+  pid: string;
+  frame: number;
+  available: boolean;
+  reason?: string;
+  engine?: string;
+  ocr_note?: string | null;
+  officers: OfficerProposals[];
+  lines_outside?: string[];
+}
+
+export const fetchProposals = (pid: string, frame: number) =>
+  get<PageProposals>(`/volumes/${encodeURIComponent(pid)}/pages/${frame}/proposals`);
+
+/** The reading worksheet for `frames` ("100", "95-110", "surveyed") as .xlsx. */
+export const exportUrl = (pid: string, frames: string, images = false) =>
+  `${BASE}/volumes/${encodeURIComponent(pid)}/export.xlsx?frames=${encodeURIComponent(frames)}` +
+  (images ? "&images=true" : "");
+
+// --------------------------------------------------------------------------
+// zoomed re-reading - NDLOCR-Lite on each cell, compared with NDL's reading
+// --------------------------------------------------------------------------
+
+export interface OcrEngine {
+  available: boolean;
+  /** Why it cannot run, when it cannot. */
+  reason: string | null;
+  home: string;
+  running: boolean;
+  version: string | null;
+  recipe: string;
+}
+
+export interface CellOcrJob {
+  state: "running" | "done" | "cancelled" | "failed";
+  done: number;
+  total: number;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface CellReading {
+  index: number;
+  field: string;
+  /** agrees: same as NDL's reading. alternative: differs, offered. unreadable: nothing usable. */
+  status: "agrees" | "alternative" | "unreadable";
+  /** Agreement only once kanji variants are folded: NDLOCR-Lite wrote the modern form. */
+  variant_only?: boolean;
+  /** The re-reading, interpreted by exactly the rules NDL's reading is. */
+  rerun: FieldProposal;
+  ndl: { fill: string | null; value: string | null; method: string | null };
+  lines: { text: string; confidence: number | null }[];
+  crops: number;
+  seconds: number;
+  engine_version: string | null;
+  read_at: string;
+}
+
+export interface CellOcrStatus {
+  pid: string;
+  frame: number;
+  engine: OcrEngine | null;
+  job: CellOcrJob | null;
+  summary?: Record<string, number>;
+  /** Keyed "officerIndex:field". */
+  results: Record<string, CellReading>;
+}
+
+async function post<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "POST" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? `${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const fetchCellOcr = (pid: string, frame: number) =>
+  get<CellOcrStatus>(`/volumes/${encodeURIComponent(pid)}/pages/${frame}/cell-ocr`);
+
+/** Start (or rejoin) the page's background re-reading, officer `start` first. */
+export const startCellOcr = (pid: string, frame: number, start: number) =>
+  post<CellOcrStatus>(`/volumes/${encodeURIComponent(pid)}/pages/${frame}/cell-ocr?start=${start}`);
+
+export const rereadCell = (pid: string, frame: number, index: number, field: string) =>
+  post<CellReading>(
+    `/volumes/${encodeURIComponent(pid)}/pages/${frame}/officers/${index}/cells/` +
+      `${encodeURIComponent(field)}/cell-ocr`,
+  );
 
 /**
  * Resolve a printed form to its controlled-vocabulary entry.

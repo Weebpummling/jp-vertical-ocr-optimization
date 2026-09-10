@@ -18,7 +18,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
@@ -31,6 +31,9 @@ import page_service as ps  # noqa: E402
 import db  # noqa: E402
 import ditto  # noqa: E402
 import eradate  # noqa: E402
+import proposal_service as props  # noqa: E402
+import volume_service as vs  # noqa: E402
+import cell_ocr  # noqa: E402
 
 app = FastAPI(
     title="jp-vertical-ocr-optimization workstation",
@@ -122,13 +125,21 @@ def vocab() -> dict:
 
 @app.get("/volumes/{pid}/pages/{frame}")
 def page(pid: str, frame: int,
-         panel: int = Query(0, ge=0, description="0 = right-hand page"),
+         panel: int | None = Query(
+             None, ge=0,
+             description="One leaf only (0 = right-hand). Omit for the whole spread."),
          crop_urls: bool = Query(False,
                                  description="Build IIIF region URLs (costs a manifest fetch)")) -> dict:
-    """Officer strips and field rectangles for one page panel.
+    """Officer strips and field rectangles for one scan.
 
-    404 if the frame cannot be retrieved; 422 if the page registers against no
-    template - an index page or a badly degraded panel is a human task, not a
+    Defaults to the **whole spread**, both leaves, numbered in reading order.
+    This used to default to panel 0 and there was no way to ask for the other
+    one, so the left-hand leaf of every scan went unread - see
+    `page_service.register_spread`. Passing `panel` explicitly still serves a
+    single leaf, for diagnosing one that will not register.
+
+    404 if the frame cannot be retrieved; 422 if no panel registers against any
+    template - an index page or a badly degraded scan is a human task, not a
     grid to be guessed at.
     """
     import iiif_client
@@ -143,9 +154,15 @@ def page(pid: str, frame: int,
 
     url_for = iiif_client.region_url if crop_urls else None
     try:
-        registered = ps.register_file(path, pid, frame, panel=panel, url_for=url_for)
+        registered = ps.register_file(path, pid, frame, panel=panel,
+                                      url_for=url_for)
     except ps.PageNotRegistrable as exc:
+        if panel is None:
+            _survey_quietly(pid, frame, vs.entry_not_roster(str(exc)))
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if panel is None:
+        # Every page opened keeps the volume's completeness picture current.
+        _survey_quietly(pid, frame, vs.entry_for_page(registered))
 
     payload = registered.as_dict()
     # The viewer needs the IIIF image service to build a tile source; the cell
@@ -248,19 +265,26 @@ def _require_page(pid: str, frame: int) -> dict:
 
 
 @app.post("/volumes/{pid}/pages/{frame}/cells", status_code=201)
-def create_cells(pid: str, frame: int, panel: int = Query(0, ge=0),
+def create_cells(pid: str, frame: int,
                  user: dict = Depends(current_user)) -> dict:
-    """Persist this page's officer geometry as `roster_cell` rows.
+    """Persist this scan's officer geometry as `roster_cell` rows.
 
     Idempotent: re-running refreshes the rectangles rather than duplicating
     officers, so a template improvement can be re-applied to a page already
     being transcribed without disturbing the observations hanging off it.
+
+    Always the whole spread, and deliberately not selectable. `roster_cell` is
+    UNIQUE (page_id, row_index) and a page_id is a frame, so persisting one leaf
+    under its own column numbers collides with the other leaf's rows and
+    re-points live observations at the wrong rectangles. `register_spread`
+    numbers the whole scan in reading order, which is the only numbering under
+    which the two leaves cannot collide.
     """
     import iiif_client
     page = _require_page(pid, frame)
     try:
         path = iiif_client.fetch_page(pid, frame)
-        registered = ps.register_file(path, pid, frame, panel=panel,
+        registered = ps.register_file(path, pid, frame,
                                       url_for=iiif_client.region_url)
     except ps.PageNotRegistrable as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -371,7 +395,9 @@ def create_observation(pid: str, frame: int, body: ObservationIn,
                             "type this date out in full"),
                     }
             else:
-                parsed = eradate.parse(body.commissioning_date)
+                # As printed, or an ISO date handed back from the reading
+                # worksheet - eradate decides which, and refuses either way.
+                parsed = eradate.parse_reading(body.commissioning_date)
                 if parsed.ok:
                     parsed_date = parsed.value
                 else:
@@ -428,6 +454,167 @@ def volume_progress(pid: str) -> dict:
         "observations": sum(f["observations"] for f in frames),
         "frames": frames,
     }
+
+
+def _survey_quietly(pid: str, frame: int, entry: dict) -> None:
+    """Keep the completeness sidecar current - never at the cost of the page."""
+    try:
+        vs.record_survey(pid, frame, entry)
+    except Exception:  # a derived cache must not fail a page load
+        pass
+
+
+# --------------------------------------------------------------------------
+# volumes, completeness, proposals, export
+# --------------------------------------------------------------------------
+
+@app.get("/volumes")
+def list_volumes() -> dict:
+    """Registered volumes, with how much of each is surveyed, cached and read."""
+    return {"volumes": vs.volumes()}
+
+
+@app.get("/volumes/{pid}/pages")
+def volume_pages(pid: str) -> dict:
+    """Every frame of a volume with its completeness - the page picker's list.
+
+    See app/volume_service.py for the statuses, and in particular why a spread
+    with an unregistered leaf is never reported as complete.
+    """
+    if not db.volume_frames(pid):
+        raise HTTPException(status_code=404,
+                            detail=f"{pid} is not registered; run "
+                                   f"`python ingestion/iiif_client.py register {pid}`")
+    return vs.page_statuses(pid)
+
+
+@app.get("/volumes/{pid}/pages/{frame}/proposals")
+def page_proposals(pid: str, frame: int) -> dict:
+    """Machine proposals for every officer on the scan, from NDL's own OCR.
+
+    200 whenever the page itself can be read: "no proposals, and here is why" is
+    something to show the reader, not a failure of the page. Nothing is written
+    anywhere - a proposal becomes a record only when a person takes it and
+    records the officer.
+    """
+    import iiif_client
+    try:
+        path = iiif_client.fetch_page(pid, frame)
+    except SystemExit as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"retrieval failed: {exc}") from exc
+    try:
+        registered = ps.register_file(path, pid, frame)
+    except ps.PageNotRegistrable as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        return props.propose_page(pid, frame, page=registered)
+    except props.ProposalsUnavailable as exc:
+        return {"pid": pid, "frame": frame, "available": False,
+                "reason": str(exc), "officers": []}
+
+
+# --------------------------------------------------------------------------
+# zoomed re-reading: NDLOCR-Lite on each cell, compared with NDL's reading
+# --------------------------------------------------------------------------
+#
+# None of these write to the record. A re-reading is an option offered beside
+# NDL's reading; a person takes one, the other, or types their own.
+
+@app.get("/ocr/engine")
+def ocr_engine() -> dict:
+    """Whether NDLOCR-Lite can be driven from here - and if not, why not."""
+    return cell_ocr.engine_status()
+
+
+def _page_image_or_error(pid: str, frame: int):
+    import iiif_client
+    try:
+        return iiif_client.fetch_page(pid, frame)
+    except SystemExit as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"retrieval failed: {exc}") from exc
+
+
+@app.get("/volumes/{pid}/pages/{frame}/cell-ocr")
+def cell_ocr_status(pid: str, frame: int) -> dict:
+    """The page's zoomed re-readings so far, and the job producing them, if any."""
+    return cell_ocr.JOBS.status(pid, frame)
+
+
+@app.post("/volumes/{pid}/pages/{frame}/cell-ocr")
+def cell_ocr_start(pid: str, frame: int,
+                   start: int = Query(0, ge=0, description="officer to read first"),
+                   fresh: bool = Query(False, description="read again cells already read")) -> dict:
+    """Re-read every cell of the page, one zoomed cell at a time, in the background.
+
+    Poll GET for progress. Cells already read with the same crop recipe and
+    engine release are not read again unless `fresh`.
+    """
+    _page_image_or_error(pid, frame)
+    engine, reason = cell_ocr.find_engine()
+    if engine is None:
+        raise HTTPException(status_code=503, detail=reason)
+    return cell_ocr.JOBS.start(pid, frame, first_officer=start, fresh=fresh)
+
+
+@app.delete("/volumes/{pid}/pages/{frame}/cell-ocr")
+def cell_ocr_cancel(pid: str, frame: int) -> dict:
+    cell_ocr.JOBS.cancel(pid, frame)
+    return cell_ocr.JOBS.status(pid, frame)
+
+
+@app.post("/volumes/{pid}/pages/{frame}/officers/{index}/cells/{field}/cell-ocr")
+def cell_ocr_one(pid: str, frame: int, index: int, field: str,
+                 fresh: bool = Query(False, description="read again even if already read")) -> dict:
+    """Re-read one cell now, zoomed in, and compare it with NDL's reading."""
+    _page_image_or_error(pid, frame)
+    try:
+        return cell_ocr.reread(pid, frame, index, field, fresh=fresh)
+    except cell_ocr.EngineUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ps.PageNotRegistrable as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except cell_ocr.WorkerError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@app.get("/volumes/{pid}/export.xlsx")
+def export_worksheet(
+        pid: str,
+        request: Request,
+        frames: str = Query(..., description="a frame (100), ranges (60,95-110), or 'surveyed'"),
+        images: bool = Query(False, description="embed the name crop beside each officer"),
+) -> FileResponse:
+    """The reading worksheet for these frames, as an Excel workbook.
+
+    Uses only page images already on this machine: a request must never become
+    a bulk download from NDL. `scripts/export_worksheet.py --fetch` is the route
+    for pages not yet here.
+    """
+    import worksheet
+    try:
+        wanted = worksheet.parse_frames(frames, pid)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if images and len(wanted) > worksheet.MAX_IMAGE_FRAMES:
+        raise HTTPException(status_code=400,
+                            detail=f"name images are limited to "
+                                   f"{worksheet.MAX_IMAGE_FRAMES} frames per export "
+                                   f"({len(wanted)} asked for)")
+    # Links in the sheet open the workstation that served it, not a fixed port.
+    base = str(request.base_url).rstrip("/")
+    if base.endswith("/api"):
+        base = base[: -len("/api")]
+    result = worksheet.export(pid, wanted, images=images, fetch=False, base_url=base)
+    return FileResponse(result.path, media_type=XLSX, filename=result.path.name)
 
 
 def _service_id(iiif_client, pid: str, frame: int) -> str | None:

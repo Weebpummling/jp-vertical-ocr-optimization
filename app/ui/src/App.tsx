@@ -20,7 +20,13 @@ import {
   storedIdCode,
   whoami,
   fetchVolumeProgress,
+  fetchProposals,
+  fetchCellOcr,
+  rereadCell,
+  startCellOcr,
   type PageObservation,
+  type PageProposals,
+  type CellOcrStatus,
   type RegisteredPage,
   type VolumeProgress,
   type Vocab,
@@ -35,8 +41,14 @@ import {
 } from "./observation";
 import { IdentityGate } from "./components/IdentityGate";
 import { Viewer } from "./components/Viewer";
-import { EntryForm, FIELDS } from "./components/EntryForm";
-import { Candidates } from "./components/Candidates";
+import {
+  EntryForm,
+  FIELDS,
+  type FieldSuggestion,
+  type OfficerState,
+} from "./components/EntryForm";
+import { Candidates, wholesaleTakes } from "./components/Candidates";
+import { PagePicker } from "./components/PagePicker";
 import "./styles.css";
 
 const DEFAULT_PID = "1449426"; // 昭和8年9月1日調
@@ -46,6 +58,33 @@ const DEFAULT_FRAME = 100;
 // reopening at a fixed frame meant every session began by remembering a number
 // that only existed on the annotator's notepad.
 const PLACE_KEY = "jpocr.place";
+// Whether this browser starts a zoom-read on every page it opens.
+const AUTO_ZOOM_KEY = "jpocr.auto-zoom";
+
+// A link from the reading worksheet (/?pid=1449426&frame=100&officer=11) opens
+// that officer directly: the spreadsheet is where a reader spots something, and
+// the workstation is where the image sits beside the form to settle it.
+function urlPlace(): { pid: string; frame: number; officer: number | null } | null {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const pid = q.get("pid");
+    const frame = Number(q.get("frame"));
+    if (!pid || !Number.isInteger(frame) || frame < 1) return null;
+    const officer = Number(q.get("officer"));
+    return {
+      pid,
+      frame,
+      officer: Number.isInteger(officer) && officer > 0 ? officer - 1 : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function startPlace(): { pid: string; frame: number } {
+  const linked = urlPlace();
+  return linked ? { pid: linked.pid, frame: linked.frame } : lastPlace();
+}
 
 function lastPlace(): { pid: string; frame: number } {
   try {
@@ -65,8 +104,8 @@ export default function App() {
   const [identityChecked, setIdentityChecked] = useState(false);
   const [gateNotice, setGateNotice] = useState<string | null>(null);
 
-  const [pid, setPid] = useState(() => lastPlace().pid);
-  const [frame, setFrame] = useState(() => lastPlace().frame);
+  const [pid, setPid] = useState(() => startPlace().pid);
+  const [frame, setFrame] = useState(() => startPlace().frame);
   const [page, setPage] = useState<RegisteredPage | null>(null);
   const [vocab, setVocab] = useState<Vocab | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +123,35 @@ export default function App() {
   // Which frames of this volume have been read at all — the "what is left?"
   // question, which the page-level counter cannot answer.
   const [progress, setProgress] = useState<VolumeProgress | null>(null);
+  // Machine proposals for the page on screen - NDL's OCR binned into the
+  // template. Offered in the third pane, never pre-filled into the form.
+  const [proposals, setProposals] = useState<PageProposals | null>(null);
+  const [proposalsLoading, setProposalsLoading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Zoomed re-reading - NDLOCR-Lite on each cell - for the page on screen.
+  const [cellOcr, setCellOcr] = useState<CellOcrStatus | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [rereading, setRereading] = useState<string | null>(null);
+  // Machine readings the reader took, per officer and field, with what was taken.
+  const [takenFrom, setTakenFrom] = useState<
+    Record<number, Record<string, { source: string; fill: string }>>
+  >({});
+  // Bumped to hand the keyboard back to the form after a take from the pane.
+  const [focusTick, setFocusTick] = useState(0);
+  const [autoZoom, setAutoZoom] = useState(() => {
+    try {
+      return localStorage.getItem(AUTO_ZOOM_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const autoZoomRef = useRef(autoZoom);
+  autoZoomRef.current = autoZoom;
+  // Pages load asynchronously; a slow answer for a page already left behind
+  // must not land on the page now on screen.
+  const loadToken = useRef(0);
+  // An officer named by a worksheet link, applied once its page has loaded.
+  const pendingOfficer = useRef<number | null>(urlPlace()?.officer ?? null);
 
   // What was on screen when each officer was last saved. Tabbing back through a
   // finished officer must not post a second draft; editing one deliberately
@@ -125,12 +193,48 @@ export default function App() {
   }, [worker]);
 
   const load = useCallback(async (p: string, f: number) => {
+    const token = ++loadToken.current;
     setLoading(true);
     setError(null);
     setDbWarning(null);
+    setProposals(null);
+    setCellOcr(null);
+    setOcrError(null);
+    setTakenFrom({});
     try {
       const data = await fetchPage(p, f);
+      if (token !== loadToken.current) return;
       setPage(data);
+      // The first page of a volume reads its whole OCR document, so proposals
+      // follow the page rather than hold it up.
+      setProposalsLoading(true);
+      fetchProposals(p, f)
+        .then((got) => {
+          if (token === loadToken.current) setProposals(got);
+        })
+        .catch((e) => {
+          if (token === loadToken.current)
+            setProposals({ pid: p, frame: f, available: false, reason: String(e), officers: [] });
+        })
+        .finally(() => {
+          if (token === loadToken.current) setProposalsLoading(false);
+        });
+      // Re-readings already made for this page, and any job still running.
+      fetchCellOcr(p, f)
+        .then((got) => {
+          if (token !== loadToken.current) return;
+          setCellOcr(got);
+          // Opted in: every page opened starts its own zoom-read. Cells already
+          // read are skipped, so reopening a finished page costs a second or two.
+          if (autoZoomRef.current && got.engine?.available && got.job?.state !== "running") {
+            startCellOcr(p, f, 0)
+              .then((started) => {
+                if (token === loadToken.current) setCellOcr(started);
+              })
+              .catch(() => undefined);
+          }
+        })
+        .catch(() => undefined);
       setOfficerIndex(0);
       setActiveField(FIELDS[0].key);
       setEntries({});
@@ -151,6 +255,7 @@ export default function App() {
       // save.
       try {
         const { observations } = await fetchObservations(p, f);
+        if (token !== loadToken.current) return;
         const existing: Record<number, SaveState> = {};
         const byRow: Record<number, PageObservation> = {};
         for (const obs of observations) {
@@ -177,6 +282,13 @@ export default function App() {
             `saved yet. Run: python ingestion/iiif_client.py register ${p}`,
         );
       }
+      const linked = pendingOfficer.current;
+      if (linked != null) {
+        pendingOfficer.current = null;
+        if (linked < data.officers.length) setOfficerIndex(linked);
+        // Followed once: a reload resumes where the reader is, not at the link.
+        window.history.replaceState(null, "", window.location.pathname);
+      }
     } catch (e) {
       setPage(null);
       setError(
@@ -185,7 +297,7 @@ export default function App() {
           : String(e),
       );
     } finally {
-      setLoading(false);
+      if (token === loadToken.current) setLoading(false);
     }
   }, []);
 
@@ -194,7 +306,7 @@ export default function App() {
     // rather than from `pid`/`frame`, so that editing those boxes never
     // re-triggers a load behind the reader's back.
     if (!worker) return;
-    const place = lastPlace();
+    const place = startPlace();
     load(place.pid, place.frame);
   }, [worker, load]);
 
@@ -262,6 +374,146 @@ export default function App() {
 
   const values = valuesFor(officerIndex);
 
+  const officerProposals = useMemo(
+    () => proposals?.officers.find((o) => o.index === officer?.index),
+    [proposals, officer],
+  );
+
+  // Taking a proposal is typing it: it becomes this session's entry for the
+  // field, editable like anything typed and recorded with the officer.
+  // Taking a reading is typing it - editable like anything typed - but where it
+  // came from is kept, and recorded with the officer if it is still what is on
+  // screen. The viewer moves to the field taken, so it is checked against the
+  // page, and the keyboard goes back to the form.
+  const take = (key: string, fill: string, source: string) => {
+    setValue(key, fill);
+    setTakenFrom((prev) => ({
+      ...prev,
+      [officerIndex]: { ...(prev[officerIndex] ?? {}), [key]: { source, fill } },
+    }));
+    setActiveField(key);
+    setFocusTick((n) => n + 1);
+  };
+
+  // Every settled proposal into every empty field at once - readings the rules
+  // accepted, and printed ditto marks, which the server resolves against the
+  // human reading above. Never over something already on screen.
+  const takeAll = useCallback(() => {
+    const picks = wholesaleTakes(officerProposals, values);
+    if (!picks.length) return;
+    setEntries((prev) => {
+      const next = { ...(prev[officerIndex] ?? {}) };
+      for (const p of picks) next[p.form_key as string] = p.fill as string;
+      return { ...prev, [officerIndex]: next };
+    });
+    setTakenFrom((prev) => {
+      const next = { ...(prev[officerIndex] ?? {}) };
+      for (const p of picks)
+        next[p.form_key as string] = { source: "ndl", fill: p.fill as string };
+      return { ...prev, [officerIndex]: next };
+    });
+  }, [officerProposals, values, officerIndex]);
+  const takeAllRef = useRef(takeAll);
+  takeAllRef.current = takeAll;
+
+  // What each form field could take in place: NDL's reading, and the zoomed
+  // re-reading where there is one.
+  const suggestions = useMemo(() => {
+    const out: Record<string, FieldSuggestion> = {};
+    if (!officer) return out;
+    for (const spec of FIELDS) {
+      if (!spec.cell) continue;
+      out[spec.key] = {
+        ndl: officerProposals?.fields[spec.cell],
+        reading: cellOcr?.results[`${officer.index}:${spec.cell}`],
+      };
+    }
+    return out;
+  }, [officer, officerProposals, cellOcr]);
+
+  // The page at a glance, for the officer strip. "Differs" counts only fields the
+  // form can take: counted over every field, the dot sat on 19 of 21 officers on
+  // frame 101 - decorations, where the zoomed reading usually drops a character -
+  // and a mark on nearly everything tells the reader nothing.
+  const officerStates = useMemo<OfficerState[]>(
+    () =>
+      (page?.officers ?? []).map((o) => ({
+        recorded: saves[o.index]?.state === "saved",
+        failed: saves[o.index]?.state === "error",
+        typed: !isBlank(entries[o.index] ?? {}) && saves[o.index]?.state !== "saved",
+        differs: Object.values(cellOcr?.results ?? {}).some(
+          (r) =>
+            r.index === o.index && r.status === "alternative" && r.rerun.form_key != null,
+        ),
+      })),
+    [page, saves, entries, cellOcr],
+  );
+
+  // The page job reports by polling. Results land in the pane as each cell is
+  // read, the officer in hand first.
+  const ocrRunning = cellOcr?.job?.state === "running";
+  useEffect(() => {
+    if (!ocrRunning || !page) return;
+    const token = loadToken.current;
+    const { pid: p, frame: f } = page;
+    const timer = window.setInterval(() => {
+      fetchCellOcr(p, f)
+        .then((got) => {
+          if (token === loadToken.current) setCellOcr(got);
+        })
+        .catch(() => undefined);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [ocrRunning, page]);
+
+  const startPageOcr = useCallback(() => {
+    if (!page) return;
+    const token = loadToken.current;
+    setOcrError(null);
+    startCellOcr(page.pid, page.frame, officer?.index ?? 0)
+      .then((got) => {
+        if (token === loadToken.current) setCellOcr(got);
+      })
+      .catch((e) => {
+        if (token === loadToken.current) setOcrError(String(e));
+      });
+  }, [page, officer]);
+
+  const rereadField = useCallback(
+    (field: string) => {
+      if (!page || !officer) return;
+      const token = loadToken.current;
+      const key = `${officer.index}:${field}`;
+      setRereading(key);
+      setOcrError(null);
+      rereadCell(page.pid, page.frame, officer.index, field)
+        .then((reading) => {
+          if (token !== loadToken.current) return;
+          setCellOcr((prev) => ({
+            pid: page.pid,
+            frame: page.frame,
+            engine: prev?.engine ?? null,
+            job: prev?.job ?? null,
+            results: { ...(prev?.results ?? {}), [key]: reading },
+          }));
+        })
+        .catch((e) => {
+          if (token === loadToken.current) setOcrError(String(e));
+        })
+        .finally(() => {
+          if (token === loadToken.current) setRereading(null);
+        });
+    },
+    [page, officer],
+  );
+  const ocrKeysRef = useRef({ page: startPageOcr, cell: () => {} });
+  ocrKeysRef.current = {
+    page: startPageOcr,
+    cell: () => {
+      if (activeCell) rereadField(activeCell.field);
+    },
+  };
+
   // Typing that has not been recorded yet. Moving between officers records them,
   // but closing the tab is the same loss by a different route — and this state
   // lives only in memory.
@@ -302,6 +554,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.isComposing) return; // the IME owns the keyboard while converting
+      if (e.key === "Escape") setPickerOpen(false);
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
       if (e.key === "PageDown") {
         e.preventDefault();
@@ -309,6 +562,18 @@ export default function App() {
       } else if (e.key === "PageUp") {
         e.preventDefault();
         goFrame(-1);
+      } else if (e.key === "a" || e.key === "A") {
+        e.preventDefault();
+        takeAllRef.current();
+      } else if (e.key === "p" || e.key === "P") {
+        e.preventDefault();
+        setPickerOpen((open) => !open);
+      } else if (e.key === "o" || e.key === "O") {
+        e.preventDefault();
+        ocrKeysRef.current.page();
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        ocrKeysRef.current.cell();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -340,10 +605,10 @@ export default function App() {
       setEntries((prev) => ({ ...prev, [index]: values }));
 
       setSaves((s) => ({ ...s, [index]: { state: "saving" } }));
-      const pageKey = `${page.pid}:${page.frame}:${page.panel}`;
+      const pageKey = `${page.pid}:${page.frame}`;
       try {
         if (!cellsEnsured.current.has(pageKey)) {
-          await createCells(page.pid, page.frame, page.panel);
+          await createCells(page.pid, page.frame);
           cellsEnsured.current.add(pageKey);
         }
         // Where each field was read from, so a character marked unreadable can
@@ -361,7 +626,17 @@ export default function App() {
         const saved = await saveObservation(
           page.pid,
           page.frame,
-          buildObservation(index, values, vocab, cropUrls),
+          buildObservation(
+            index,
+            values,
+            vocab,
+            cropUrls,
+            Object.fromEntries(
+              Object.entries(takenFrom[index] ?? {})
+                .filter(([key, took]) => values[key] === took.fill)
+                .map(([key, took]) => [key, took.source]),
+            ),
+          ),
         );
         savedSnapshot.current[index] = snapshot;
         setSaves((s) => ({
@@ -380,11 +655,28 @@ export default function App() {
         }));
       }
     },
-    [page, entries, valuesFor, vocab, signOut],
+    [page, entries, valuesFor, vocab, signOut, takenFrom],
   );
 
   // Kept current so page navigation can flush the officer in hand.
   commitRef.current = () => commit(officerIndex);
+
+  // Jumping to an officer records the one in hand first, as every other way of
+  // leaving an officer does.
+  const jumpTo = (index: number) => {
+    if (index === officerIndex) return;
+    void commit(officerIndex);
+    setOfficerIndex(index);
+  };
+
+  const changeAutoZoom = (on: boolean) => {
+    setAutoZoom(on);
+    try {
+      localStorage.setItem(AUTO_ZOOM_KEY, on ? "1" : "0");
+    } catch {
+      // Not remembered across sessions; it still applies to this one.
+    }
+  };
 
   // The viewer follows the cursor: the current cell if the field has one,
   // otherwise the whole officer strip (branch and rank live in the section
@@ -403,6 +695,17 @@ export default function App() {
   const readFrames = new Set(progress?.frames.map((f) => f.frame_no) ?? []);
   let nextUnread = frame + 1;
   while (readFrames.has(nextUnread)) nextUnread++;
+
+  const openFrame = async (target: number) => {
+    await commitRef.current?.();
+    setFrame(target);
+    load(page?.pid ?? pid, target);
+  };
+  const pageComplete =
+    Boolean(page) &&
+    (page?.officer_count ?? 0) > 0 &&
+    savedCount >= (page?.officer_count ?? 0) &&
+    (page?.panels_missing.length ?? 0) === 0;
 
   return (
     <div className="app">
@@ -447,6 +750,14 @@ export default function App() {
           >
             next ›
           </button>
+          <button
+            type="button"
+            onClick={() => setPickerOpen((open) => !open)}
+            aria-expanded={pickerOpen}
+            title="Every page of every volume, and how finished each is (Alt+P)"
+          >
+            pages
+          </button>
         </form>
         {/* While a page is in flight the previous page's numbers are still in
             state. Leaving them under a frame box that already shows the new
@@ -455,17 +766,42 @@ export default function App() {
         {loading && <p className="status">loading frame {frame}…</p>}
         {page && !loading && (
           <p className="status">
-            <code>{page.template_id}</code> · {page.officer_count} officers ·{" "}
-            {savedCount} recorded · {page.bands_matched}/{page.bands_total} bands ·
+            <code>{page.template_id}</code> · {page.officer_count} officers
+            {page.panels_total > 1 &&
+              ` across ${page.panels_registered.length} of ${page.panels_total} leaves`}{" "}
+            · {savedCount} recorded · {page.bands_matched}/{page.bands_total} bands ·
             skew {page.skew_deg}°
             {page.needs_review && (
               <span className="tag tag--suspect">needs review</span>
             )}
-            {savedCount >= page.officer_count && page.officer_count > 0 && (
-              <span className="tag tag--done">
-                page complete — Alt+PageDown for the next
+            {/* A leaf that matched no template carries officers nobody can
+                reach from here. Saying so is the whole point: a scan whose
+                left-hand page failed looks identical to a scan that only ever
+                had one page, and the counter below would call it finished. */}
+            {page.panels_missing.length > 0 && (
+              <span className="tag tag--suspect">
+                {page.panels_missing.length === 1
+                  ? `the ${page.panels_missing[0] === 0 ? "right" : "left"}-hand leaf did not register — its officers are NOT on this page`
+                  : `${page.panels_missing.length} leaves did not register — their officers are NOT on this page`}
               </span>
             )}
+            {savedCount >= page.officer_count &&
+              page.officer_count > 0 &&
+              (page.panels_missing.length === 0 ? (
+                <button
+                  type="button"
+                  className="tag tag--done tag--action"
+                  onClick={() => openFrame(nextUnread)}
+                  title="Record anything in hand and open the next page nobody has read"
+                >
+                  page complete — next unread page {nextUnread} ›
+                </button>
+              ) : (
+                <span className="tag tag--suspect">
+                  every officer this page can show is recorded — but a leaf is
+                  missing, so the page is not done
+                </span>
+              ))}
           </p>
         )}
         {progress && !loading && (
@@ -518,6 +854,14 @@ export default function App() {
             saveState={saves[officerIndex]}
             isLastOfficer={officerIndex === page.officers.length - 1}
             recordedBy={entries[officerIndex] ? undefined : recorded[officerIndex]?.author}
+            suggestions={suggestions}
+            onTake={take}
+            officerStates={officerStates}
+            onJump={jumpTo}
+            focusTick={focusTick}
+            pageComplete={pageComplete}
+            nextPageLabel={pageComplete ? `next unread page ${nextUnread}` : null}
+            onNextPage={() => openFrame(nextUnread)}
           />
           <Candidates
             field={activeField}
@@ -526,8 +870,41 @@ export default function App() {
               activeCell ? regionUrl(page.pid, page.frame, activeCell.bbox) : null
             }
             officerCropUrl={regionUrl(page.pid, page.frame, officer.bbox)}
+            proposals={officerProposals}
+            unavailable={
+              proposals && !proposals.available ? (proposals.reason ?? "unavailable") : null
+            }
+            loading={proposalsLoading}
+            values={values}
+            onTake={take}
+            onTakeAll={takeAll}
+            officerIndex={officer.index}
+            readings={cellOcr?.results ?? {}}
+            ocrJob={cellOcr?.job ?? null}
+            engine={cellOcr?.engine ?? null}
+            ocrError={ocrError}
+            rereading={rereading}
+            onStartPageOcr={startPageOcr}
+            onReread={rereadField}
+            autoZoom={autoZoom}
+            onAutoZoom={changeAutoZoom}
           />
         </main>
+      )}
+
+      {pickerOpen && (
+        <PagePicker
+          pid={page?.pid ?? pid}
+          frame={page?.frame ?? frame}
+          onClose={() => setPickerOpen(false)}
+          onOpen={async (p, f) => {
+            setPickerOpen(false);
+            await commitRef.current?.();
+            setPid(p);
+            setFrame(f);
+            load(p, f);
+          }}
+        />
       )}
     </div>
   );

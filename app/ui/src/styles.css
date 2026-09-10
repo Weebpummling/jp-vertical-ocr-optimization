@@ -350,3 +350,158 @@ kbd {
 .toolkit__ditto:hover { background: #faf7fd; }
 .save__inherited ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
 .save__inherited p { margin: 0; }
+
+/* ---- machine proposals ----
+   Dashed and tinted, always: a proposal must never be mistakable for a value a
+   person entered, and it reaches the form only when taken. */
+.proposals { padding: 0.6rem 0.9rem 1rem; border-top: 1px solid var(--line); }
+.proposals__head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.proposals__head h3 { margin: 0; font-size: 0.85rem; }
+.proposals__foot { margin: 0.4rem 0 0; font-size: 0.72rem; }
+.proplist { list-style: none; margin: 0.45rem 0 0; padding: 0; }
+.prop {
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr) auto;
+  column-gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.3rem 0.45rem;
+  margin-bottom: 0.3rem;
+  border: 1px dashed var(--line);
+  border-radius: 3px;
+  background: #fbfaf6;
+}
+.prop--active { border-color: var(--accent); background: #f4f8fc; }
+.prop__label { font: 600 0.78rem/1.4 var(--font-jp); }
+.prop__value { font: 0.95rem/1.35 var(--font-jp); color: var(--provisional); word-break: break-all; }
+.prop--refused .prop__value { color: var(--suspect); }
+.prop--blank .prop__value { color: var(--muted); }
+.prop--suspect .prop__label::after { content: " \26A0"; color: var(--suspect); }
+.prop__take { font-size: 0.75rem; padding: 0.05rem 0.45rem; }
+.prop__ctx { font-size: 0.7rem; color: var(--muted); }
+.prop__method { grid-column: 2 / -1; font-size: 0.7rem; color: var(--muted); }
+.prop__why { grid-column: 1 / -1; font-size: 0.72rem; color: var(--suspect); }
+
+/* ---- page picker ---- */
+.picker {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(440px, 94vw);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid var(--line);
+  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.14);
+  z-index: 30;
+}
+.picker__head { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line); }
+.picker__head h2 { margin: 0; font-size: 0.95rem; }
+.picker__body { padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 0.35rem; }
+.picker__vol { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.78rem; color: var(--muted); }
+.picker__vol select { font-size: 0.85rem; padding: 0.2rem; }
+.picker__title { margin: 0; font: 0.85rem/1.4 var(--font-jp); }
+.picker__summary { margin: 0; font-size: 0.78rem; color: var(--muted); }
+.picker__toggle { display: flex; gap: 0.35rem; align-items: center; font-size: 0.78rem; color: var(--muted); }
+.picker__next { align-self: flex-start; }
+.picker__loading { margin: 0; padding: 0.5rem 0.9rem; }
+.picker__foot { border-top: 1px solid var(--line); padding: 0.55rem 0.9rem; font-size: 0.8rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.chip { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 0.05rem 0.55rem; font-size: 0.75rem; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: #f0f5fa; }
+.chip__n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pagelist { list-style: none; margin: 0; padding: 0.3rem 0.4rem; overflow-y: auto; flex: 1; }
+.pg {
+  display: grid;
+  grid-template-columns: 3.3rem minmax(0, 1fr) 4rem auto;
+  gap: 0.5rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.28rem 0.5rem;
+  border: 0;
+  border-left: 4px solid transparent;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.pg:hover { background: #f4f8fc; }
+.pg--current { background: #eaf1f9; box-shadow: inset 0 0 0 1px var(--accent); }
+.pg--complete { border-left-color: #3b7d4f; }
+.pg--leaf_missing { border-left-color: var(--suspect); }
+.pg--in_progress { border-left-color: var(--accent); }
+.pg--not_started { border-left-color: #c9c3b8; }
+.pg--unsurveyed, .pg--not_roster { color: var(--muted); }
+.pg__frame { font-weight: 600; font-variant-numeric: tabular-nums; }
+.pg__status { font: 0.85rem var(--font-jp); }
+.pg__status small { margin-left: 0.35rem; font: 0.72rem system-ui, sans-serif; color: var(--muted); }
+.pg--leaf_missing .pg__status { color: var(--suspect); }
+.pg__count { font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+.pg__flags { display: flex; gap: 0.25rem; }
+.pg__net { font-size: 0.68rem; color: var(--muted); border: 1px dashed var(--line); border-radius: 3px; padding: 0 0.25rem; }
+
+/* ---- zoomed re-reading ----
+   The alternative is its own colour, never the proposal's and never plain: a
+   reader must see at a glance which engine read what. */
+.zoomocr { margin: 0.35rem 0 0.2rem; font-size: 0.78rem; }
+.zoomocr__line { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.crop__reread { display: block; margin: 0.45rem auto 0; font-size: 0.75rem; }
+.prop__method { grid-column: 2 / 3; }
+.prop__reread { grid-column: 3; justify-self: end; font-size: 0.7rem; }
+.prop__note { grid-column: 1 / -1; font-size: 0.7rem; color: var(--muted); }
+.prop__agree { grid-column: 1 / -1; font-size: 0.7rem; color: #3b7d4f; }
+.prop__alt {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr) auto;
+  column-gap: 0.5rem;
+  align-items: baseline;
+  margin-top: 0.3rem;
+  padding-top: 0.25rem;
+  border-top: 1px dashed #8fbcb8;
+}
+.prop__alt-label { font-size: 0.7rem; font-weight: 600; color: #2a6f6b; }
+.prop__alt-value { font: 0.95rem/1.35 var(--font-jp); color: #2a6f6b; word-break: break-all; }
+
+/* ---- usability pass: officer strip and in-place suggestions ----
+   Suggestions keep the machine's styling contract: dashed, tinted, never plain. */
+.strip { list-style: none; display: flex; flex-wrap: wrap; gap: 0.2rem; margin: 0.45rem 0 0.2rem; padding: 0; }
+.strip__o {
+  position: relative;
+  min-width: 1.75rem;
+  padding: 0.05rem 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  font: 0.72rem/1.4 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.strip__o--done { background: #e6f0e8; border-color: #9cc3a6; color: #2f5d3a; }
+.strip__o--typed { border-color: var(--accent); border-style: dashed; }
+.strip__o--failed { border-color: var(--suspect); color: var(--suspect); }
+.strip__o--here { outline: 2px solid var(--accent); font-weight: 700; }
+.strip__dot { position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; border-radius: 50%; background: #2a6f6b; }
+.chips-inline { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.25rem 0 0; }
+.sug {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.08rem 0.45rem;
+  border: 1px dashed var(--line);
+  border-radius: 3px;
+  background: #fbfaf6;
+  font: 0.85rem/1.4 var(--font-jp);
+  color: var(--provisional);
+  text-align: left;
+  word-break: break-all;
+  cursor: pointer;
+}
+.sug:hover { border-style: solid; }
+.sug__src { font: 600 0.6rem/1 system-ui, sans-serif; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.sug--alt { color: #2a6f6b; border-color: #8fbcb8; }
+.sug--unsettled { color: var(--suspect); }
+.sug--taken { opacity: 0.5; }
+.sug__agree { color: #3b7d4f; font-weight: 700; }
+.save__next { display: block; margin-top: 0.5rem; }
+.tag--action { cursor: pointer; background: #fff; font: inherit; }
+.zoomocr__auto { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--muted); }

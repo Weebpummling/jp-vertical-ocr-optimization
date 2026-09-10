@@ -5,16 +5,38 @@
  * centring is a direct conversion into OpenSeadragon's viewport coordinates
  * (x / imageWidth) with no second lookup.
  */
+/// <reference types="vite/client" />
 import { useEffect, useRef, useState } from "react";
 import OpenSeadragon from "openseadragon";
 import type { Bbox } from "../api";
 
-// Vite resolves this to the bundled sprite directory, so the viewer's own
-// controls do not depend on a CDN the workstation may not be able to reach.
-const osdImages = new URL(
-  "../../node_modules/openseadragon/build/openseadragon/images/",
-  import.meta.url,
-).href;
+// The viewer's button sprites, resolved file by file at build time. Pointing
+// OpenSeadragon at the node_modules directory worked under the dev server and
+// nowhere else: the built workstation requested /node_modules/... and every
+// zoom, home and full-page button rendered as a broken image.
+const sprites = import.meta.glob<string>(
+  "../../node_modules/openseadragon/build/openseadragon/images/*.png",
+  { eager: true, query: "?url", import: "default" },
+);
+const sprite = (name: string) =>
+  Object.entries(sprites).find(([file]) => file.endsWith(`/${name}.png`))?.[1] ?? "";
+const button = (base: string) => ({
+  REST: sprite(`${base}_rest`),
+  GROUP: sprite(`${base}_grouphover`),
+  HOVER: sprite(`${base}_hover`),
+  DOWN: sprite(`${base}_pressed`),
+});
+const navImages = {
+  zoomIn: button("zoomin"),
+  zoomOut: button("zoomout"),
+  home: button("home"),
+  fullpage: button("fullpage"),
+  rotateleft: button("rotateleft"),
+  rotateright: button("rotateright"),
+  flip: button("flip"),
+  previous: button("previous"),
+  next: button("next"),
+};
 
 interface Props {
   /** Local page image (see api.pageImageUrl) — not the institution's tiles. */
@@ -36,8 +58,9 @@ export function Viewer({ imageUrl, focus, pad = 0.6 }: Props) {
     setFailure(null);
     const viewer = OpenSeadragon({
       element: hostRef.current,
-      // Bundled with the package, so the viewer has no CDN dependency.
-      prefixUrl: osdImages,
+      // Each sprite is already a full URL; nothing to prefix.
+      prefixUrl: "",
+      navImages,
       // A single cached image rather than a tile pyramid: the page is already
       // on disk, and this keeps transcription working with no network at all.
       tileSources: { type: "image", url: imageUrl },
