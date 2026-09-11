@@ -336,14 +336,48 @@ class CameraScanTests(unittest.TestCase):
             self.assertEqual(grid.n_officer_columns, 6)
             self.assertEqual(grid.interpolated_columns, ())
 
-    def test_a_page_edge_one_pitch_outside_the_table_is_not_a_column(self):
-        """The paper edge runs the leaf's full height; the table's rulings do not.
-        Only the outer side is examined - the gutter-side frame reads long too."""
+    def test_a_page_edge_reached_across_interpolated_columns_is_not_a_column(self):
+        """A paper edge two pitches out joins the grid with a column interpolated
+        between it and the table; no frame loses two neighbours at once. Only
+        the outer side is examined - the gutter-side frame reads long too."""
         img = self.spread()
-        img[160:1440, self.RIGHT[1] + self.PITCH - 2:self.RIGHT[1] + self.PITCH + 3] = 40
-        img[160:1440, self.LEFT[0] - self.PITCH - 2:self.LEFT[0] - self.PITCH + 3] = 40
+        x = self.RIGHT[1] + 2 * self.PITCH
+        img[160:1440, x - 2:x + 3] = 40
+        x = self.LEFT[0] - 2 * self.PITCH
+        img[160:1440, x - 2:x + 3] = 40
         grids = R.detect_page(img)
         self.assertEqual([g.n_officer_columns for g in grids], [6, 6])
+        self.assertEqual([g.interpolated_columns for g in grids], [(), ()])
+
+    def test_a_short_line_at_the_outer_end_is_not_a_column(self):
+        """A crease or margin mark on the pitch, spanning half the table."""
+        img = self.spread()
+        x = self.RIGHT[1] + self.PITCH
+        img[self.TOP + 300:self.BOT - 200, x - 2:x + 3] = 40
+        grids = R.detect_page(img)
+        self.assertEqual(grids[0].n_officer_columns, 6)
+
+    def test_a_page_edge_one_pitch_outside_the_table_is_not_a_column(self):
+        """The paper edge runs past the table at both ends; a frame does not
+        (pid 930894 frame 150, checked against the page's thirteen strips)."""
+        img = self.spread()
+        x = self.RIGHT[1] + self.PITCH
+        img[160:1440, x - 2:x + 3] = 40
+        x = self.LEFT[0] - self.PITCH
+        img[160:1440, x - 2:x + 3] = 40
+        grids = R.detect_page(img)
+        self.assertEqual([g.n_officer_columns for g in grids], [6, 6])
+
+    def test_a_gutter_frame_lost_to_the_shadow_is_recovered_and_flagged(self):
+        """The frame beside the gutter goes unseen, but a line remnant is there
+        a third of a pitch off; the column is placed on the pitch, interpolated."""
+        img = self.spread()
+        x0 = self.RIGHT[0]
+        img[self.TOP:self.BOT, x0 - 2:x0 + 3] = 200          # frame not printed...
+        img[self.TOP:self.BOT, x0 - 30:x0 - 27] = 40          # ...a remnant nearby
+        grid = R.detect_page(img)[0]
+        self.assertEqual(grid.n_officer_columns, 6)
+        self.assertEqual(len(grid.interpolated_columns), 1)
 
     def test_a_line_outside_the_table_is_not_a_band(self):
         grids = R.detect_page(self.spread())

@@ -91,13 +91,30 @@ RULING_EXTENT_HALF = 3
 # Camera scans only; the film path is left as measured.
 MIN_COLUMN_SEP = 0.01
 # A camera scan's paper, cover and page-block edges are long vertical lines
-# too, and one that lands a pitch outside the table joins the officer grid as
-# a phantom column (pid 930894 frame 100 left leaf; pid 1908494 frame 100 left
-# leaf, two pitches out, with a column interpolated between). Table columns
-# share the table's vertical extent; an end column whose extent differs from
-# the others' by more than this fraction of panel height is not one.
+# too, and one that lands on the pitch outside the table joins the officer
+# grid as a phantom column (pid 930894 frame 150, one pitch out on both
+# leaves; pid 1908494 frame 165 left leaf, four pitches out with three columns
+# interpolated to reach it). Table columns share the table's vertical extent;
+# a line at the leaf's outer end that overshoots it by more than this fraction
+# of panel height, or spans less than SHORT_EDGE_FRAC of it, is not a column -
+# see _trim_edge_columns.
 COLUMN_EXTENT_TOL = 0.03
 SHORT_EDGE_FRAC = 0.8
+# The gutter-side frame of the 1923 tables stands ~5 px from the binding
+# shadow and the local threshold loses it there; the officer strip beside the
+# gutter then vanishes without a word (pid 930894 frames 51 and 328, the strip
+# of 列次 403 / 1854). If the officer run stops a pitch short of a vertical
+# line seen within this fraction of a pitch of where the frame would be, the
+# frame is placed at the pitch and flagged as interpolated - an inferred edge
+# the reader is told about, like any other interpolated column.
+GUTTER_FRAME_TOL = 0.35
+# ...and only where a frame can stand: past the gutter overlap the leaf was
+# cut with, plus this fraction of a pitch. The binding shadow is itself a line
+# on the pitch when the frame was found, and without the margin it put a
+# ninth strip on eight-strip pages (pid 930894 frame 100; pid 1908494 frame
+# 100, whose overlap is 177 px on a wider scan). The recovered 1923 frames
+# sit 130 px in on a 115-px overlap.
+GUTTER_FRAME_BUFFER = 0.15
 # Rows a horizontal ruling is smeared over before profiling, camera scans only
 # (see _table_rulings): 5 px covers ~0.25 deg over a 1250-px table.
 TABLE_RULING_SMEAR = 5
@@ -505,23 +522,30 @@ def _table_extent(extents: dict[int, tuple[int, int]], tol: float) -> tuple[floa
 
 def _trim_edge_columns(columns: list[int], interpolated: list[int],
                        vert: np.ndarray, outer: str) -> tuple[list[int], list[int]]:
-    """Drop page edges that joined the officer grid at the leaf's outer end.
+    """Drop lines that joined the officer grid at the leaf's outer end.
 
     `outer` is "left" or "right": the side of the leaf away from the gutter,
-    where the paper edge, the page block and the cover run as long vertical
-    lines. Only that end is examined, and only for an extent that overshoots
-    the table's (COLUMN_EXTENT_TOL): the gutter-side frame column reads long
-    too, because the binding strip sits within a few px of it on the 1923
-    volume, and a faint interior ruling reads short - neither is an edge.
-    Works inward and stops at the first column with the table's extent. An
-    interpolated end column goes with the edge it was interpolated towards.
+    where the paper edge, the page block, the cover and the margin's own marks
+    run as long vertical lines. Only that end is examined, and by two tests:
+
+    - an extent that overshoots the table's at either end by more than
+      COLUMN_EXTENT_TOL - the paper edge (pid 930894 frame 150: 128-1425
+      against a table of 226-1364, one pitch outside the last strip; checked
+      against the page, which has thirteen strips, not fourteen);
+    - a line spanning well under the table's height (SHORT_EDGE_FRAC) - a
+      crease, a margin mark. Interior rulings may be faint and short; the
+      outer end is the only place a short line is dropped, and only until the
+      first full-height one;
+    - a column reached only across interpolated ones (below).
+
+    The gutter side is never trimmed: its frame column reads over-long too,
+    because the binding shadow sits within a few px of it on the 1923 volume.
     """
     extents = _column_extents(vert, [x for x in columns if x not in interpolated])
     if len(extents) < 3:
         return columns, interpolated
     tol = COLUMN_EXTENT_TOL * vert.shape[0]
     top, bottom = _table_extent(extents, RULING_EXTENT_TOL * vert.shape[0])
-
     height = bottom - top
 
     def is_edge(x: int) -> bool:
@@ -531,11 +555,7 @@ def _trim_edge_columns(columns: list[int], interpolated: list[int],
         if first is None:
             return False
         if first < top - tol or last > bottom + tol:
-            return True             # runs beyond the table: paper, cover, page block
-        # A ruling spanning well under the table's height at the outer end is
-        # not a column either - a crease, or the margin's own marks. Interior
-        # rulings may be faint and short; the outer end is the only place a
-        # short line is dropped, and only until the first full-height one.
+            return True
         return (last - first) < SHORT_EDGE_FRAC * height
 
     kept = list(columns)
@@ -588,6 +608,39 @@ def _table_rulings(horiz: np.ndarray, columns: list[int]) -> list[int]:
     return _profile_lines(band, axis=0, min_run_frac=TABLE_RULING_MIN_FRAC)
 
 
+def _recover_gutter_frame(columns: list[int], interpolated: list[int],
+                          vlines: list[int], outer: str, panel_w: int,
+                          gutter_overlap: float) -> tuple[list[int], list[int]]:
+    """Put back a gutter-side frame the run stopped short of (GUTTER_FRAME_TOL).
+
+    Evidence, not invention: a vertical line must have been seen within the
+    tolerance of the pitch position (the shadow-merged remnant of the frame),
+    the position must lie clear of the gutter zone (`gutter_overlap` plus
+    GUTTER_FRAME_BUFFER), and the column goes into `interpolated`, so every
+    cell it bounds is suspect.
+    """
+    if len(columns) < 3:
+        return columns, interpolated
+    real = [x for x in columns if x not in interpolated]
+    if len(real) < 2:
+        return columns, interpolated
+    pitch = float(np.median(np.diff(real)))
+    margin = gutter_overlap + GUTTER_FRAME_BUFFER * pitch
+    if outer == "right":                       # gutter is on the left
+        want = columns[0] - pitch
+        near = [v for v in vlines if v < columns[0] and abs(v - want) <= GUTTER_FRAME_TOL * pitch]
+        if not near or want < margin:
+            return columns, interpolated
+        x = int(round(want))
+        return [x] + columns, interpolated + [x]
+    want = columns[-1] + pitch
+    near = [v for v in vlines if v > columns[-1] and abs(v - want) <= GUTTER_FRAME_TOL * pitch]
+    if not near or want > panel_w - margin:
+        return columns, interpolated
+    x = int(round(want))
+    return columns + [x], interpolated + [x]
+
+
 def _within_column_rulings(hlines: list[int], vert: np.ndarray, columns: list[int],
                            interpolated: list[int]) -> list[int]:
     """The horizontal rulings that lie within the officer-column rulings' reach.
@@ -618,14 +671,15 @@ def _binarize(gray: np.ndarray, kind: str) -> np.ndarray:
 
 
 def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
-                outer: str = "right") -> Grid | None:
+                outer: str = "right", gutter_overlap: float = 0.0) -> Grid | None:
     """Detect the ruling grid on one already-cropped panel.
 
     `panel_gray` is the panel at detection scale; `panel` describes where that
     panel sits in the original scan, so the result can be mapped back; `kind` is
     the scan's `scan_kind`, and on a camera scan `outer` names the side of the
-    leaf away from the gutter ("right" for the right-hand page). Returns None
-    when the panel has no table-like ruling structure at all.
+    leaf away from the gutter ("right" for the right-hand page) and
+    `gutter_overlap` how far, in panel px, the leaf reaches past the gutter cut.
+    Returns None when the panel has no table-like ruling structure at all.
     """
     binv = _binarize(panel_gray, kind)
     angle = _deskew_angle(binv)
@@ -660,6 +714,8 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
         columns, interpolated = _trim_edge_columns(columns, interpolated, vert, outer)
         if len(columns) < 2:
             return None
+        columns, interpolated = _recover_gutter_frame(columns, interpolated, vlines, outer,
+                                                      panel_gray.shape[1], gutter_overlap)
         hlines = _table_rulings(horiz, columns)
         hlines = _within_column_rulings(hlines, vert, columns, interpolated)
         if len(hlines) < 2:
@@ -686,8 +742,9 @@ def detect_leaves(image: np.ndarray, scale: float = SCALE) -> list[Grid | None]:
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     small = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     kind = scan_kind(small)
+    overlap = GUTTER_OVERLAP * small.shape[1] if kind == BACKDROP else 0.0
     return [detect_grid(small[p.y:p.y + p.h, p.x:p.x + p.w], p, kind=kind,
-                        outer="right" if i == 0 else "left")
+                        outer="right" if i == 0 else "left", gutter_overlap=overlap)
             for i, p in enumerate(find_panels(small))]
 
 
