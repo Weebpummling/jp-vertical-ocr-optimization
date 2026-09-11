@@ -21,6 +21,7 @@
     "tolerance_frac": 0.01,
     "min_bands_matched": 6,
     "required_bands": [2],
+    "text_intervals": [[2, 3]],
     "min_explained_frac": 0.7,
     "min_columns": 2,
     "note": "min_explained_frac 0.7 for the reason given on the wide template of this edition. Measured 10 Sep 2026 against every cached 1923, 1926, 1933 and 1935 leaf. Accepted: both leaves of 150, 350 and 450, the left leaves of 550 and 650 - 6-7 of 7 bands, 80-100% explained (650's left leaf carries extra rulings: 0.80). required_bands [2] is the ruling under 列次, as on the wide template; it costs frame 750, whose two leaves are real 尉官 pages scoring 6/7 with that thin ruling lost - left as misses rather than let 各部 pages in. Also rejected: 250 right leaf (5/7), 830 and 850 (休職, 5/7 and missing band 2), 550 and 650 right leaves (misdetected). Tolerance 0.01 for the same reason as the wide template. No Shōwa leaf matches more than 5 of 7 or is more than 50% explained."

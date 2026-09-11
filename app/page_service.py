@@ -224,12 +224,15 @@ def register_image(image, pid: str, frame: int, *, panel: int = 0,
     Raises `PageNotRegistrable` if the panel matches no template.
     """
     templates = templates if templates is not None else R.load_library(TEMPLATE_DIR)
-    grids = R.detect_page(image, scale=scale)
+    grids = R.detect_leaves(image, scale=scale)
     if panel >= len(grids):
         raise PageNotRegistrable(
             f"{pid} frame {frame}: panel {panel} not found ({len(grids)} detected)")
 
     grid = grids[panel]
+    if grid is None:
+        raise PageNotRegistrable(
+            f"{pid} frame {frame} panel {panel}: no ruling grid on this leaf")
     reg = R.classify(grid, templates)
     if reg is None:
         raise PageNotRegistrable(
@@ -298,8 +301,10 @@ def register_spread(image, pid: str, frame: int, **kwargs) -> RegisteredPage:
     A panel that matches no template is skipped, not fatal: half a spread read is
     better than none, and `panels_total` against `panels_registered` is what says
     a leaf was left out - loudly, rather than by a page quietly looking finished.
+    That count includes a leaf on which no grid was found at all (a blank page,
+    or rulings that did not come through): it too is a leaf nobody read.
     """
-    grids = R.detect_page(image, scale=kwargs.get("scale", R.SCALE))
+    grids = R.detect_leaves(image, scale=kwargs.get("scale", R.SCALE))
     pages, officers, registered = [], [], []
     for index in range(len(grids)):
         try:

@@ -97,6 +97,12 @@ MIN_COLUMN_SEP = 0.01
 # share the table's vertical extent; an end column whose extent differs from
 # the others' by more than this fraction of panel height is not one.
 COLUMN_EXTENT_TOL = 0.03
+SHORT_EDGE_FRAC = 0.8
+# Rows a horizontal ruling is smeared over before profiling, camera scans only
+# (see _table_rulings): 5 px covers ~0.25 deg over a 1250-px table.
+TABLE_RULING_SMEAR = 5
+TABLE_RULING_MIN_FRAC = 0.5
+COLUMN_RULING_SMEAR = 5
 
 
 # --------------------------------------------------------------------------
@@ -174,6 +180,10 @@ class Template:
     expected_columns: int
     provenance: dict
     required_bands: tuple[int, ...] = ()
+    # Band intervals (pairs of band indices) inside which a detected ruling is
+    # not counted against the page: cells of dense small type whose rows read
+    # as lines. Declared by the layout, never inferred from the page.
+    text_intervals: tuple[tuple[int, int], ...] = ()
 
     @classmethod
     def from_dict(cls, d: dict) -> "Template":
@@ -190,6 +200,7 @@ class Template:
             expected_columns=d.get("columns", {}).get("expected", 0),
             provenance=d.get("provenance", {}),
             required_bands=tuple(m.get("required_bands", ())),
+            text_intervals=tuple((a, b) for a, b in m.get("text_intervals", ())),
         )
 
 
@@ -511,22 +522,70 @@ def _trim_edge_columns(columns: list[int], interpolated: list[int],
     tol = COLUMN_EXTENT_TOL * vert.shape[0]
     top, bottom = _table_extent(extents, RULING_EXTENT_TOL * vert.shape[0])
 
+    height = bottom - top
+
     def is_edge(x: int) -> bool:
         if x in interpolated:
             return True
         first, last = extents.get(x, (None, None))
         if first is None:
             return False
-        return first < top - tol or last > bottom + tol
+        if first < top - tol or last > bottom + tol:
+            return True             # runs beyond the table: paper, cover, page block
+        # A ruling spanning well under the table's height at the outer end is
+        # not a column either - a crease, or the margin's own marks. Interior
+        # rulings may be faint and short; the outer end is the only place a
+        # short line is dropped, and only until the first full-height one.
+        return (last - first) < SHORT_EDGE_FRAC * height
 
     kept = list(columns)
     if outer == "left":
         while len(kept) > 2 and is_edge(kept[0]):
             kept.pop(0)
+        # An end column reached only across interpolated ones lies a whole
+        # pitch or more from the nearest ruling actually seen: a page edge that
+        # happened to sit on the pitch (pid 1908494 frame 165, left leaf, three
+        # columns interpolated to reach it), not a frame whose neighbours all
+        # faded at once.
+        while len(kept) > 2 and kept[1] in interpolated:
+            kept.pop(0)
+            while len(kept) > 2 and kept[0] in interpolated:
+                kept.pop(0)
     else:
         while len(kept) > 2 and is_edge(kept[-1]):
             kept.pop()
+        while len(kept) > 2 and kept[-2] in interpolated:
+            kept.pop()
+            while len(kept) > 2 and kept[-1] in interpolated:
+                kept.pop()
     return kept, [x for x in interpolated if x in kept]
+
+
+def _table_rulings(horiz: np.ndarray, columns: list[int]) -> list[int]:
+    """Horizontal rulings measured across the table's own width.
+
+    `_profile_lines` asks for 30% of the panel width in one pixel row. A film
+    panel is the page, so that is a third of the table; a camera-scan panel is
+    half the scan, and the 1926 table fills two thirds of it - a residual
+    quarter-degree of tilt then spreads a 1-px band rule over several rows,
+    none of which holds enough, and the leaf comes back with its frame and
+    nothing between (pid 1908494 frame 66, left leaf; 55% of that volume's
+    roster frames lost a leaf this way). Once the columns are known the rulings
+    are read inside the table's x-range, smeared a few rows so a slight tilt
+    still stacks, and must cross half the table (TABLE_RULING_MIN_FRAC).
+
+    Half, and not more: a row of tightly set small type - the 明治/同 heads of
+    the date lines, the 少尉/中尉 tags under them - is welded into a bar by the
+    closing step and reaches 0.5-0.92 of the table width, where a printed ruling
+    on the wide pages reaches 0.96-1.00; but the narrow pages' rulings read far
+    fainter, and at 0.8 or above most of them fail (sample of 41 frames: 12
+    with both leaves against 26 at 0.5). The text bars are left to the
+    template's explained-fraction gate.
+    """
+    x0, x1 = columns[0], columns[-1]
+    band = cv2.dilate(horiz[:, x0:x1 + 1],
+                      cv2.getStructuringElement(cv2.MORPH_RECT, (1, TABLE_RULING_SMEAR)))
+    return _profile_lines(band, axis=0, min_run_frac=TABLE_RULING_MIN_FRAC)
 
 
 def _within_column_rulings(hlines: list[int], vert: np.ndarray, columns: list[int],
@@ -579,9 +638,19 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
     horiz, vert = _ruling_masks(binv)
 
     hlines = _profile_lines(horiz, axis=0)
-    vlines = _profile_lines(vert, axis=1)
     if kind == BACKDROP:
-        vlines = _merge_close(vlines, MIN_COLUMN_SEP * panel_gray.shape[1])
+        # A column ruling a fraction of a degree off drifts across several
+        # pixel columns over a camera-scan leaf and no single one holds 30% of
+        # the panel height. Smear sideways before profiling; the doubles a
+        # tilt makes are merged below. (Not a cure for a bowed page: pid
+        # 1908494 frame 74's left leaf spreads each column over ~20 px near
+        # the spine and is still lost - reported as a missing leaf.)
+        smeared = cv2.dilate(vert, cv2.getStructuringElement(
+            cv2.MORPH_RECT, (COLUMN_RULING_SMEAR, 1)))
+        vlines = _merge_close(_profile_lines(smeared, axis=1),
+                              MIN_COLUMN_SEP * panel_gray.shape[1])
+    else:
+        vlines = _profile_lines(vert, axis=1)
     if len(hlines) < 2 or len(vlines) < 2:
         return None
     columns, interpolated = _table_columns(vlines, panel_gray.shape[1])
@@ -591,6 +660,7 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
         columns, interpolated = _trim_edge_columns(columns, interpolated, vert, outer)
         if len(columns) < 2:
             return None
+        hlines = _table_rulings(horiz, columns)
         hlines = _within_column_rulings(hlines, vert, columns, interpolated)
         if len(hlines) < 2:
             return None
@@ -604,18 +674,27 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
     )
 
 
-def detect_page(image: np.ndarray, scale: float = SCALE) -> list[Grid]:
-    """Detect grids for every page panel in a full scan image (reading order)."""
+def detect_leaves(image: np.ndarray, scale: float = SCALE) -> list[Grid | None]:
+    """One entry per page panel of a scan, in reading order: its grid, or None
+    when the leaf has no table-like ruling structure.
+
+    The None matters. A leaf that yields no grid is still a leaf - a blank
+    page at a section's end, or a page whose rulings did not come through -
+    and dropping it from the list made the other leaf look like the whole
+    scan: pid 1908494 frame 74 carries 16 officers and reported 8, complete.
+    """
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     small = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     kind = scan_kind(small)
-    grids = []
-    for i, p in enumerate(find_panels(small)):
-        g = detect_grid(small[p.y:p.y + p.h, p.x:p.x + p.w], p, kind=kind,
+    return [detect_grid(small[p.y:p.y + p.h, p.x:p.x + p.w], p, kind=kind,
                         outer="right" if i == 0 else "left")
-        if g is not None:
-            grids.append(g)
-    return grids
+            for i, p in enumerate(find_panels(small))]
+
+
+def detect_page(image: np.ndarray, scale: float = SCALE) -> list[Grid]:
+    """Detect grids for every page panel in a full scan image (reading order),
+    leaves without a grid left out - see `detect_leaves` for the full picture."""
+    return [g for g in detect_leaves(image, scale) if g is not None]
 
 
 # --------------------------------------------------------------------------
@@ -663,8 +742,21 @@ def register(grid: Grid, template: Template) -> Registration:
     # that one lands near every template band by chance and matches perfectly in
     # the forward direction alone. Observed on a real page (frame 700 panel 1:
     # 28 rulings, 12/12 forward matches, 1 officer column).
+    #
+    # A ruling inside a declared text interval is neither for nor against: the
+    # Taishō appointment cell holds four lines of small type whose rows weld
+    # into bars, and a 将官 leaf carried four of them - 7 of 7 bands matched,
+    # 0.54 explained, refused (pid 930894 frames 14, 25, 71). The interval is
+    # the template's statement about where its print is dense, so ignoring
+    # what is found there is still top-down.
+    def in_text(b: float) -> bool:
+        tol = template.tolerance_frac
+        return any(template.band_fracs[a] + tol < b < template.band_fracs[z] - tol
+                   for a, z in template.text_intervals)
+
+    considered = [b for b in detected if not in_text(b)]
     explained = sum(
-        1 for b in detected
+        1 for b in considered
         if min(abs(b - t) for t in template.band_fracs) <= template.tolerance_frac
     )
     return Registration(
@@ -673,7 +765,7 @@ def register(grid: Grid, template: Template) -> Registration:
         band_ys=tuple(band_ys),
         unmatched_bands=tuple(unmatched),
         mean_residual_frac=round(float(np.mean(residuals)), 5) if residuals else 1.0,
-        explained_frac=round(explained / len(detected), 4) if detected else 0.0,
+        explained_frac=round(explained / len(considered), 4) if considered else 0.0,
     )
 
 

@@ -69,4 +69,6 @@ python -m unittest discover -s reading -p "test_*.py"
    the numbers in `match.note` so the next person knows why the gate sits where it does.
    Where a neighbouring layout differs by missing a ruling rather than moving one, name that
    band in `match.required_bands`: `min_bands_matched` forgives any one miss and cannot
-   tell a faint line from a row the page never had.
+   tell a faint line from a row the page never had. Where a cell holds rows of dense small
+   type that read as lines (the Taishō appointment cell), name the interval in
+   `match.text_intervals`: rulings found inside it count neither for nor against the page.

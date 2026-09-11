@@ -21,6 +21,7 @@
     "tolerance_frac": 0.01,
     "min_bands_matched": 7,
     "required_bands": [2, 3],
+    "text_intervals": [[2, 3]],
     "min_explained_frac": 0.7,
     "min_columns": 2,
     "note": "min_explained_frac 0.7, not the Shōwa 0.8: with eight bands 0.8 forgives one extra line, and the aligned strokes of the date columns form a false horizontal line on many leaves (see taisho12-teinen-meibo-wide). The index-like frames 850 and 875 reach 0.62 and fall to the band gates as well. Measured 10 Sep 2026 against every cached 1923, 1926, 1933 and 1935 leaf. Accepted: frame 20 right leaf, both leaves of 60 and 100, 150 left leaf - 7-8 of 8 bands, 90-100% explained. required_bands [2, 3] are the rulings under 列次 and under 任官ノ年月日: the left leaves of 40 (主計監) and 650 score 6/8 with 100% explained and both missing - the 各部 layout, which prints neither 列次 nor 出身期別. Also rejected: 20 left and 150 right leaves (misdetected), 850 and 875 (index-like, at most 50% explained). The narrow pages score 6/8 here and these pages 6/8 on the narrow template: the two lowest rulings sit 0.018 and 0.013 apart, beyond the 0.01 tolerance, so min_bands_matched 7 keeps each page on its own template. No Shōwa leaf matches more than 5 of 8 or is more than 50% explained; no 1923 leaf passes."

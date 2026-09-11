@@ -254,6 +254,39 @@ class RequiredBandTests(unittest.TestCase):
         self.assertIsNotNone(R.classify(self.grid, [self.template([1, 2])]))
 
 
+class TextIntervalTests(unittest.TestCase):
+    """Rulings inside a declared dense-type cell count neither for nor against."""
+
+    def setUp(self):
+        # three spurious lines inside the "middle" field (bands 2..4)
+        noisy = sorted(BAND_FRACS + (0.25, 0.28, 0.31))
+        self.grid = R.detect_grid(make_panel(), R.Panel(0, 0, PANEL_W, PANEL_H))
+        self.noisy = R.Grid(panel=self.grid.panel, skew_deg=0.0, table=self.grid.table,
+                            band_ys=tuple(int(TABLE_TOP + f * (TABLE_BOT - TABLE_TOP))
+                                          for f in noisy),
+                            column_xs=self.grid.column_xs)
+
+    def test_bars_in_a_text_cell_do_not_lower_the_explained_fraction(self):
+        plain = R.register(self.noisy, make_template())
+        declared = R.register(self.noisy, make_template(
+            match={"tolerance_frac": 0.015, "min_bands_matched": 6,
+                   "min_explained_frac": 0.8, "min_columns": 2,
+                   "text_intervals": [[2, 4]]}))
+        self.assertLess(plain.explained_frac, 0.8)
+        self.assertEqual(declared.explained_frac, 1.0)
+
+    def test_a_line_outside_the_interval_still_counts_against(self):
+        outside = R.Grid(panel=self.grid.panel, skew_deg=0.0, table=self.grid.table,
+                         band_ys=tuple(int(TABLE_TOP + f * (TABLE_BOT - TABLE_TOP))
+                                       for f in sorted(BAND_FRACS + (0.6,))),
+                         column_xs=self.grid.column_xs)
+        reg = R.register(outside, make_template(
+            match={"tolerance_frac": 0.015, "min_bands_matched": 6,
+                   "min_explained_frac": 0.8, "min_columns": 2,
+                   "text_intervals": [[2, 4]]}))
+        self.assertLess(reg.explained_frac, 1.0)
+
+
 class CameraScanTests(unittest.TestCase):
     """The Taishō volumes are camera scans of the bound book, not film scans.
 
