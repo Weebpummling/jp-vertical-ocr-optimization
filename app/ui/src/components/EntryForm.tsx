@@ -47,7 +47,12 @@ export const FIELDS: FieldSpec[] = [
     hint: "from the section header, not this officer's cell",
   },
   { key: "post", label: "職名", cell: "post" },
-  { key: "commissioning_date", label: "任官年月日", cell: "commissioning_date" },
+  {
+    key: "commissioning_date",
+    label: "任官年月日",
+    cell: "commissioning_date",
+    hint: "Taishō pages: the line tagged 少尉 in the 任官ノ年月日 cell (machine readings, right)",
+  },
   { key: "notes", label: "備考", cell: null },
 ];
 

@@ -32,6 +32,9 @@ const ORDER: { field: string; ja: string }[] = [
   { field: "commissioning_date", ja: "少尉任官" },
   { field: "rank_date", ja: "現階級任官" },
   { field: "prev_rank_date", ja: "前階級任官" },
+  // The Taishō volumes print every appointment in one cell, each date tagged
+  // with its rank; the schema's 任官年月日 is the line tagged 少尉 inside it.
+  { field: "appointment_dates", ja: "任官ノ年月日" },
   { field: "service_in_rank", ja: "実役停年" },
   { field: "court_rank_decorations", ja: "位階勲等" },
 ];
