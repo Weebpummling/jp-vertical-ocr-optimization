@@ -104,7 +104,7 @@ OBS_STATUS = {
 }
 
 FIELD_JA = {
-    "seniority_no": "序列", "name_raw": "氏名", "birth": "生年月日", "cohort": "期",
+    "seniority_no": "序列", "name_raw": "氏名", "birth": "生年月日・年齡", "cohort": "期",
     "branch": "兵科", "rank": "階級", "post": "職名",
     "commissioning_date": "少尉任官", "rank_date": "現階級任官",
     "prev_rank_date": "前階級任官", "service_in_rank": "実役停年",
@@ -144,7 +144,8 @@ BASE_COLUMNS = (
     Column("status", "状態", "Status", 17, wrap=True),
     Column("seniority_no", "序列", "Seniority", 8, True, "int"),
     Column("name_raw", "氏名", "Name", 14, True),
-    Column("birth", "生年月日", "Born (as read)", 13, True),
+    # Shōwa pages print a birth date beside the name, Taishō pages the age (年齡).
+    Column("birth", "生年月日・年齡", "Born or age (as read)", 13, True),
     Column("cohort", "期", "Cohort", 6, True, "int"),
     Column("branch", "兵科", "Branch", 8, True),
     Column("rank", "階級", "Rank", 8, True),

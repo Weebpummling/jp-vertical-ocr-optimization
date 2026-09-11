@@ -75,6 +75,28 @@ GUTTER_OVERLAP = 0.05
 # Horizontal rulings further than this (of panel height) outside the vertical
 # reach of the officer-column rulings are not table - see _within_column_rulings.
 RULING_EXTENT_TOL = 0.015
+# Half-width, px at SCALE, of the window a column ruling's extent is read in.
+# Narrow on purpose: the 1923 tables sit ~5 px from the gutter shadow, and a
+# 15-px window took that full-height dark strip for the frame's own extent and
+# trimmed the frame off as a page edge (pid 930894 frame 100). The price is a
+# leaf whose deskew came out a degree wrong (pid 930894 frame 24, right leaf):
+# its rulings drift out of the window, and the leaf is reported as missing.
+RULING_EXTENT_HALF = 3
+# A ruling the deskew left tilted is detected twice, a few px apart, and enough
+# doubles wreck the pitch estimate: pid 930894 frame 27's left leaf took three
+# lines 45 px apart at the gutter for the officer grid. Vertical lines closer
+# than this fraction of panel width are one ruling. The doubles sit 8-10 px
+# apart on a 1215-px leaf; 0.02 was too coarse - it welded a table frame to the
+# paper edge 24 px away and lost a 尉官 column whose pitch is only 60 px.
+# Camera scans only; the film path is left as measured.
+MIN_COLUMN_SEP = 0.01
+# A camera scan's paper, cover and page-block edges are long vertical lines
+# too, and one that lands a pitch outside the table joins the officer grid as
+# a phantom column (pid 930894 frame 100 left leaf; pid 1908494 frame 100 left
+# leaf, two pitches out, with a column interpolated between). Table columns
+# share the table's vertical extent; an end column whose extent differs from
+# the others' by more than this fraction of panel height is not one.
+COLUMN_EXTENT_TOL = 0.03
 
 
 # --------------------------------------------------------------------------
@@ -419,6 +441,94 @@ def _table_columns(vlines: list[int], panel_w: int) -> tuple[list[int], list[int
     return columns, interpolated
 
 
+def _merge_close(lines: list[int], min_sep: float) -> list[int]:
+    """Collapse lines nearer than `min_sep` into one at their mean."""
+    merged: list[list[int]] = []
+    for x in sorted(lines):
+        if merged and x - merged[-1][-1] < min_sep:
+            merged[-1].append(x)
+        else:
+            merged.append([x])
+    return [int(round(sum(g) / len(g))) for g in merged]
+
+
+def _column_extents(vert: np.ndarray, columns: list[int]) -> dict[int, tuple[int, int]]:
+    """First and last row each column ruling occupies (RULING_EXTENT_HALF)."""
+    half = RULING_EXTENT_HALF
+    out = {}
+    for x in columns:
+        rows = np.flatnonzero(vert[:, max(0, x - half):x + half + 1].any(axis=1))
+        if len(rows):
+            out[x] = (int(rows[0]), int(rows[-1]))
+    return out
+
+
+def _agreed(values: list[int], tol: float, *, from_top: bool) -> float:
+    """The outermost position at least two column rulings share (within tol).
+
+    The median start of the column rulings put a table's top 70 px too low on
+    a leaf whose interior rulings are faint near the top (pid 930894 frame 250,
+    left leaf) - the true top rule was then discarded and the frame column
+    trimmed as an edge. A lone outlier (a gutter-side frame whose window
+    catches the binding strip, a page edge) never sets the extent either: two
+    rulings must begin, or end, together. Falls back to the largest cluster.
+    """
+    ordered = sorted(values) if from_top else sorted(values, reverse=True)
+    clusters: list[list[int]] = []
+    for v in ordered:
+        if clusters and abs(v - clusters[-1][-1]) <= tol:
+            clusters[-1].append(v)
+        else:
+            clusters.append([v])
+    for c in clusters:
+        if len(c) >= 2:
+            return float(np.median(c))
+    return float(np.median(max(clusters, key=len)))
+
+
+def _table_extent(extents: dict[int, tuple[int, int]], tol: float) -> tuple[float, float]:
+    firsts = [e[0] for e in extents.values()]
+    lasts = [e[1] for e in extents.values()]
+    return _agreed(firsts, tol, from_top=True), _agreed(lasts, tol, from_top=False)
+
+
+def _trim_edge_columns(columns: list[int], interpolated: list[int],
+                       vert: np.ndarray, outer: str) -> tuple[list[int], list[int]]:
+    """Drop page edges that joined the officer grid at the leaf's outer end.
+
+    `outer` is "left" or "right": the side of the leaf away from the gutter,
+    where the paper edge, the page block and the cover run as long vertical
+    lines. Only that end is examined, and only for an extent that overshoots
+    the table's (COLUMN_EXTENT_TOL): the gutter-side frame column reads long
+    too, because the binding strip sits within a few px of it on the 1923
+    volume, and a faint interior ruling reads short - neither is an edge.
+    Works inward and stops at the first column with the table's extent. An
+    interpolated end column goes with the edge it was interpolated towards.
+    """
+    extents = _column_extents(vert, [x for x in columns if x not in interpolated])
+    if len(extents) < 3:
+        return columns, interpolated
+    tol = COLUMN_EXTENT_TOL * vert.shape[0]
+    top, bottom = _table_extent(extents, RULING_EXTENT_TOL * vert.shape[0])
+
+    def is_edge(x: int) -> bool:
+        if x in interpolated:
+            return True
+        first, last = extents.get(x, (None, None))
+        if first is None:
+            return False
+        return first < top - tol or last > bottom + tol
+
+    kept = list(columns)
+    if outer == "left":
+        while len(kept) > 2 and is_edge(kept[0]):
+            kept.pop(0)
+    else:
+        while len(kept) > 2 and is_edge(kept[-1]):
+            kept.pop()
+    return kept, [x for x in interpolated if x in kept]
+
+
 def _within_column_rulings(hlines: list[int], vert: np.ndarray, columns: list[int],
                            interpolated: list[int]) -> list[int]:
     """The horizontal rulings that lie within the officer-column rulings' reach.
@@ -431,18 +541,11 @@ def _within_column_rulings(hlines: list[int], vert: np.ndarray, columns: list[in
     Taishō samples. Film scans never pass through here: their panels are the
     page alone, and the Shōwa templates were derived without this filter.
     """
-    firsts, lasts = [], []
-    for x in columns:
-        if x in interpolated:
-            continue
-        rows = np.flatnonzero(vert[:, max(0, x - 3):x + 4].any(axis=1))
-        if len(rows):
-            firsts.append(rows[0])
-            lasts.append(rows[-1])
-    if not firsts:
+    extents = _column_extents(vert, [x for x in columns if x not in interpolated])
+    if not extents:
         return []
-    top, bottom = float(np.median(firsts)), float(np.median(lasts))
     tol = RULING_EXTENT_TOL * vert.shape[0]
+    top, bottom = _table_extent(extents, tol)
     return [y for y in hlines if top - tol <= y <= bottom + tol]
 
 
@@ -455,13 +558,15 @@ def _binarize(gray: np.ndarray, kind: str) -> np.ndarray:
     return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
 
 
-def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM) -> Grid | None:
+def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
+                outer: str = "right") -> Grid | None:
     """Detect the ruling grid on one already-cropped panel.
 
     `panel_gray` is the panel at detection scale; `panel` describes where that
     panel sits in the original scan, so the result can be mapped back; `kind` is
-    the scan's `scan_kind`. Returns None when the panel has no table-like ruling
-    structure at all.
+    the scan's `scan_kind`, and on a camera scan `outer` names the side of the
+    leaf away from the gutter ("right" for the right-hand page). Returns None
+    when the panel has no table-like ruling structure at all.
     """
     binv = _binarize(panel_gray, kind)
     angle = _deskew_angle(binv)
@@ -475,12 +580,17 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM) -> Gr
 
     hlines = _profile_lines(horiz, axis=0)
     vlines = _profile_lines(vert, axis=1)
+    if kind == BACKDROP:
+        vlines = _merge_close(vlines, MIN_COLUMN_SEP * panel_gray.shape[1])
     if len(hlines) < 2 or len(vlines) < 2:
         return None
     columns, interpolated = _table_columns(vlines, panel_gray.shape[1])
     if len(columns) < 2:
         return None
     if kind == BACKDROP:
+        columns, interpolated = _trim_edge_columns(columns, interpolated, vert, outer)
+        if len(columns) < 2:
+            return None
         hlines = _within_column_rulings(hlines, vert, columns, interpolated)
         if len(hlines) < 2:
             return None
@@ -500,8 +610,9 @@ def detect_page(image: np.ndarray, scale: float = SCALE) -> list[Grid]:
     small = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     kind = scan_kind(small)
     grids = []
-    for p in find_panels(small):
-        g = detect_grid(small[p.y:p.y + p.h, p.x:p.x + p.w], p, kind=kind)
+    for i, p in enumerate(find_panels(small)):
+        g = detect_grid(small[p.y:p.y + p.h, p.x:p.x + p.w], p, kind=kind,
+                        outer="right" if i == 0 else "left")
         if g is not None:
             grids.append(g)
     return grids

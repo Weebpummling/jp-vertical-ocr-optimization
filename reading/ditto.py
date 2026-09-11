@@ -46,8 +46,12 @@ DITTOABLE = ("seniority_no", "name_raw", "rank_code", "branch_code",
 # 陸軍士官学校 class number is in the set on the evidence of the print: the
 # roster dittos it 32 times across four sample pages, using 〃 rather than the
 # 同 the date columns use. Both are ditto marks and both mean the row above.
+#
+# appointment_dates is the Taishō volumes' one cell for every appointment date;
+# the print dittos the whole cell (同) where an officer's dates all repeat the
+# neighbour's - pid 930894 frame 100, 列次 428 against 427.
 DITTOABLE_FIELDS = ("service_in_rank", "rank_date", "prev_rank_date",
-                    "commissioning_date", "post", "cohort")
+                    "commissioning_date", "appointment_dates", "post", "cohort")
 
 
 def is_ditto(text: str | None) -> bool:

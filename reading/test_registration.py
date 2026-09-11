@@ -303,6 +303,15 @@ class CameraScanTests(unittest.TestCase):
             self.assertEqual(grid.n_officer_columns, 6)
             self.assertEqual(grid.interpolated_columns, ())
 
+    def test_a_page_edge_one_pitch_outside_the_table_is_not_a_column(self):
+        """The paper edge runs the leaf's full height; the table's rulings do not.
+        Only the outer side is examined - the gutter-side frame reads long too."""
+        img = self.spread()
+        img[160:1440, self.RIGHT[1] + self.PITCH - 2:self.RIGHT[1] + self.PITCH + 3] = 40
+        img[160:1440, self.LEFT[0] - self.PITCH - 2:self.LEFT[0] - self.PITCH + 3] = 40
+        grids = R.detect_page(img)
+        self.assertEqual([g.n_officer_columns for g in grids], [6, 6])
+
     def test_a_line_outside_the_table_is_not_a_band(self):
         grids = R.detect_page(self.spread())
         for grid in grids:

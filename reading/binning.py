@@ -43,6 +43,13 @@ SAME_RUN = 0.5
 # so; a date parser handed it would either refuse loudly or, worse, succeed.
 DATE_FIELDS = ("rank_date", "prev_rank_date", "commissioning_date")
 NUMERIC_FIELDS = ("seniority_no", "cohort")
+# The Taishō volumes print a small circled mark beside some seniority numbers
+# (⊖1505 on pid 1908494 frame 350; after the number on pid 930894 frame 150),
+# and NDL reads it as a geta or a symbol. The digits are still the number: one
+# such character at either end is set aside and named in the note. A letter or
+# a kanji beside the digits (5少 in the cohort row) is not a mark and still
+# refuses - what it means is for the lead.
+NUMBER_WITH_MARK = re.compile(r"^([〓○◎⊖⊕⊗●◯△▲□■※]?)(\d+)([〓○◎⊖⊕⊗●◯△▲□■※]?)$")
 
 # Furigana is printed beside a name in small kana, and NDL boxes each ruby column
 # as a line of its own. Where one overlaps the name column it falls into the same
@@ -412,9 +419,16 @@ def _propose_field(name: str, cell: Cell, above: OfficerProposal | None) -> Prop
         return Proposal(name, None, text, "refused", parsed.reason, cell.suspect)
 
     if name in NUMERIC_FIELDS:
-        digits = "".join(ch for ch in raw if ch.isdigit())
-        if digits and digits == raw.strip():
+        text = raw.strip()
+        digits = "".join(ch for ch in text if ch.isdigit())
+        if digits and digits == text:
             return Proposal(name, digits, raw, "digits", suspect=cell.suspect)
+        marked = NUMBER_WITH_MARK.match(text)
+        if marked:
+            mark = marked.group(1) or marked.group(3)
+            return Proposal(name, marked.group(2), raw, "digits",
+                            f"a mark printed beside the number was read as {mark}",
+                            cell.suspect)
         return Proposal(name, None, raw, "refused",
                         "expected digits only", cell.suspect)
 

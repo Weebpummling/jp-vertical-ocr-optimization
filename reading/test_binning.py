@@ -111,6 +111,22 @@ class ProposalTests(unittest.TestCase):
         got = self.propose([BoxedLine("九一五", 10, 10, 40, 40)])
         self.assertIsNone(got[0].fields["seniority_no"].value)
 
+    def test_a_mark_printed_beside_the_number_is_set_aside(self):
+        """The Taishō volumes print a small circled mark by some seniority
+        numbers; NDL reads it as a geta. The digits are still the number."""
+        for raw in ("403〓", "〓1505", "⊖1505"):
+            with self.subTest(raw=raw):
+                p = self.propose([BoxedLine(raw, 10, 10, 40, 40)])[0].fields["seniority_no"]
+                self.assertEqual(p.method, "digits")
+                self.assertEqual(p.value, "".join(ch for ch in raw if ch.isdigit()))
+                self.assertIn("mark", p.note)
+
+    def test_a_letter_beside_the_number_still_refuses(self):
+        """5少 in the cohort row is not a stray mark: what it means is for the lead."""
+        p = self.propose([BoxedLine("少5", 10, 10, 40, 40)])[0].fields["seniority_no"]
+        self.assertIsNone(p.value)
+        self.assertEqual(p.method, "refused")
+
     def test_an_empty_cell_proposes_nothing_and_says_so(self):
         got = self.propose([])
         p = got[0].fields["name_raw"]

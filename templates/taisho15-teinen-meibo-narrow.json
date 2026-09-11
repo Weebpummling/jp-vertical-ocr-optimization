@@ -21,9 +21,9 @@
     "tolerance_frac": 0.01,
     "min_bands_matched": 7,
     "required_bands": [2, 3],
-    "min_explained_frac": 0.8,
+    "min_explained_frac": 0.7,
     "min_columns": 2,
-    "note": "Measured 10 Sep 2026 against every cached 1923, 1926, 1933 and 1935 leaf. Accepted: frame 250 right leaf (an empty ruled table - its 13 strips are for the reader to mark extra_row), both leaves of 350, 450 and 550 - 7-8 of 8 bands, all 100% explained. Rejected: 250 left leaf, which carries that section's officers, with only 4 rulings found - a known miss. required_bands [2, 3] as on the wide template. The wide pages score 6/8 here (see the wide template). No Shōwa leaf matches more than 5 of 8 or is more than 50% explained."
+    "note": "min_explained_frac 0.7 for the reason given on the wide template of this edition. Measured 10 Sep 2026 against every cached 1923, 1926, 1933 and 1935 leaf. Accepted: frame 250 right leaf (an empty ruled table - its 13 strips are for the reader to mark extra_row), both leaves of 350, 450 and 550 - 7-8 of 8 bands, all 100% explained. Rejected: 250 left leaf, which carries that section's officers, with only 4 rulings found - a known miss. required_bands [2, 3] as on the wide template. The wide pages score 6/8 here (see the wide template). No Shōwa leaf matches more than 5 of 8 or is more than 50% explained."
   },
 
   "columns": {
