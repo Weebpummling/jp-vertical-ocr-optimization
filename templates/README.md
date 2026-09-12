@@ -30,11 +30,11 @@ that uses them is [`reading/registration.py`](../reading/registration.py); tests
 | `taisho15-teinen-meibo-wide.json` | 1926 edition, 将官・佐官 pages: the 1923 bands plus a 出身期別 row | pid 1908494 (大正15年調), 5 panels across frames 20–150 |
 | `taisho15-teinen-meibo-narrow.json` | same edition and fields, 尉官 pages: 13 strips per leaf, the two lowest rulings lower | pid 1908494, 4 panels across frames 350–550 |
 
-**Every Taishō label is unconfirmed.** The bands are named from the legend column the
-volumes print at the head of each 尉官 section, but none has been checked by the lead. See
-each field's `note` - above all `appointment_dates`, the one cell that holds every rank's
-appointment date (so `commissioning_date` is a line inside it, not a band), and `name_raw`,
-where the small figures are 年齡 (age), not a birth date.
+**Taishō labels confirmed by the lead 11 Sep 2026** (`docs/decision-taisho-field-labels.md`).
+The bands are named from the legend column the volumes print at the head of each 尉官
+section. Two points a reader needs: `appointment_dates` is the one cell holding every rank's
+appointment date, and its 少尉 line is the schema's `commissioning_date`; the small figures
+under a name are 年齡 (age at the 調 date), not a birth date.
 
 **Camera scans.** The Taishō volumes are photographs of the bound book, not film scans, and
 `reading/registration.py` handles them on their own path (`scan_kind`): leaves overlap past

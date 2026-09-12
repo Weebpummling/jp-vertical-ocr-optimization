@@ -12,7 +12,7 @@
     "panels_used": 5,
     "method": "Rulings detected per leaf on the camera-scan path of reading/registration.py. A leaf was admitted only if it carried all six interior rulings of this layout within 0.012: frame 20 right leaf (中将), both leaves of frame 60, the left leaves of 100 and 150 (歩兵少佐). Pooled fractions clustered at 0.015, band = cluster median; every band has support 5/5, spread <= 0.0017 except 0.1694 (0.011: frame 20 carries an extra ruling at 0.18 that chains in). Outer bands are the table frame, 0.0 and 1.0; the inner rule of the double frame (~0.006 in) falls within tolerance of them. Not admitted: frame 20 left leaf (misdetected), frame 40 (主計監 - the 各部 layout, which prints neither 列次 nor 出身期別), frame 100 right leaf (lost the 0.620 ruling), 150 right (two rulings found), 650 (no 列次 or 出身期別 rulings on either leaf - the 各部 layout), 750 (一等獸醫正, 各部; the right leaf is a blank page), 850 and 875 (index-like pages), front matter 5 and 12.",
     "derived_on": "2026-09-10",
-    "field_labels": "Read from the legend column printed inside the table on frames 250 and 350: 現官ノ實役停年 / 列次 / 任官ノ年月日 / 出身期別 / 職名、命課ノ年月日 / 本邦位、勳、功、爵、學位 外國勳章 / 氏名 with 年齡 between. No legend page for the wide layout is in the sample; its seven bands hold the same content in the same order (frames 20 and 100 compared by eye). Nobody has confirmed any label on this edition."
+    "field_labels": "Read from the legend column printed inside the table on frames 250 and 350: 現官ノ實役停年 / 列次 / 任官ノ年月日 / 出身期別 / 職名、命課ノ年月日 / 本邦位、勳、功、爵、學位 外國勳章 / 氏名 with 年齡 between. No legend page for the wide layout is in the sample; its seven bands hold the same content in the same order (frames 20 and 100 compared by eye). Labels confirmed by the lead 11 Sep 2026 (docs/decision-taisho-field-labels.md)."
   },
 
   "band_fracs": [0.0, 0.1272, 0.1694, 0.3883, 0.4303, 0.6203, 0.7663, 1.0],
@@ -37,58 +37,58 @@
     {
       "name": "service_in_rank",
       "band": [0, 1],
-      "confirmed": false,
+      "confirmed": true,
       "evidence": "documentary",
       "maps_to": null,
-      "note": "現官ノ實役停年 (legend) - elapsed service in the current rank as 年、月、日, e.g. 三、五、一六 on frame 100 (歩兵少佐). NOT a date: do not parse with reading/eradate.py. Printed once and dittoed 同 along the officers who share it."
+      "note": "現官ノ實役停年 (legend) - elapsed service in the current rank as 年、月、日, e.g. 三、五、一六 on frame 100 (歩兵少佐). NOT a date: do not parse with reading/eradate.py. Printed once and dittoed 同 along the officers who share it. Confirmed by the lead 11 Sep 2026."
     },
     {
       "name": "seniority_no",
       "band": [1, 2],
-      "confirmed": false,
+      "confirmed": true,
       "evidence": "documentary",
       "maps_to": "observation.seniority_no",
-      "note": "列次 (legend) - Arabic numerals ascending right-to-left within a section (frame 100: 104-112 right leaf, 113-124 left, with gaps). Numbered within rank: 引田乾作 is 14 among 中将 here, 44 in 大正12年調."
+      "note": "列次 (legend) - Arabic numerals ascending right-to-left within a section (frame 100: 104-112 right leaf, 113-124 left, with gaps). Numbered within rank: 引田乾作 is 14 among 中将 here, 44 in 大正12年調. The small circled mark printed before some numbers (⊖1505 on pid 1908494 frame 350) is unexplained; the reader notes it in 備考, the number stands. Confirmed by the lead 11 Sep 2026."
     },
     {
       "name": "appointment_dates",
       "band": [2, 3],
-      "confirmed": false,
+      "confirmed": true,
       "evidence": "documentary",
       "maps_to": null,
-      "note": "任官ノ年月日 (legend) - ONE cell holding every appointment, each date tagged with the rank it conferred (明治三九、六、二六少尉 / 同四二、一二、一中尉 / 大正…大尉 / 同…少佐), the era dittoed 同. The schema's commissioning_date is the line tagged 少尉 inside it. Not a single date: do not parse the cell with eradate; deliberately not mapped to commissioning_date."
+      "note": "任官ノ年月日 (legend) - ONE cell holding every appointment, each date tagged with the rank it conferred (明治三九、六、二六少尉 / 同四二、一二、一中尉 / 大正…大尉 / 同…少佐), the era dittoed 同. Not a single date: do not parse the cell with eradate. Decided by the lead 11 Sep 2026: the line tagged 少尉 in this cell IS the schema's commissioning_date, and the reader types that line into the form's 任官年月日 field; the cell itself stays unmapped."
     },
     {
       "name": "cohort",
       "band": [3, 4],
-      "confirmed": false,
+      "confirmed": true,
       "evidence": "documentary",
       "maps_to": null,
-      "note": "出身期別 (legend) - class of origin, an Arabic number: 16-19 among 歩兵少佐 on frame 100, 5-7 among 中将 on frame 20. The narrow pages also print forms such as 5少; see that template. Presumably the 陸軍士官学校 期 as on the Shōwa pages, but the legend does not say so. No observation column."
+      "note": "出身期別 (legend) - class of origin, an Arabic number: 16-19 among 歩兵少佐 on frame 100, 5-7 among 中将 on frame 20. No observation column. Decided by the lead 11 Sep 2026: a plain number is the 陸軍士官学校 class (期); a number with a small 少 (2少, 4少, 5少 on pid 1908494 frame 350) is the class of a different commissioning route, e.g. 少尉候補者 - record both as printed."
     },
     {
       "name": "post",
       "band": [4, 5],
-      "confirmed": false,
+      "confirmed": true,
       "evidence": "documentary",
       "maps_to": "observation.post",
-      "note": "職名、命課ノ年月日 (legend) - the assignment, with the date of the posting in small type at the foot of the cell (第十二師團參謀 / 一四、一二、二)."
+      "note": "職名、命課ノ年月日 (legend) - the assignment, with the date of the posting in small type at the foot of the cell (第十二師團參謀 / 一四、一二、二). Confirmed by the lead 11 Sep 2026."
     },
     {
       "name": "court_rank_decorations",
       "band": [5, 6],
-      "confirmed": false,
+      "confirmed": true,
       "evidence": "documentary",
       "maps_to": null,
-      "note": "本邦位、勳、功、爵、學位 / 外國勳章 (legend) - e.g. 正六、瑞五、旭四. No observation column."
+      "note": "本邦位、勳、功、爵、學位 / 外國勳章 (legend) - e.g. 正六、瑞五、旭四. No observation column. Confirmed by the lead 11 Sep 2026."
     },
     {
       "name": "name_raw",
       "band": [6, 7],
-      "confirmed": false,
+      "confirmed": true,
       "evidence": "documentary",
       "maps_to": "observation.name_raw",
-      "note": "氏名 (legend) in large type, with 年齡 in small type beneath: AGE as 年、月 at the 調 date, NOT a birth date as on the Shōwa pages. 引田乾作 reads 五四、一〇 here and 五一、一〇 in 大正12年調. reading/binning.py sets a birth date aside only when it carries an era mark, so these figures stay in the name proposal; the reader separates them."
+      "note": "氏名 (legend) in large type, with 年齡 in small type beneath: AGE as 年、月 at the 調 date, NOT a birth date as on the Shōwa pages. 引田乾作 reads 五四、一〇 here and 五一、一〇 in 大正12年調. reading/binning.py sets a birth date aside only when it carries an era mark, so these figures stay in the name proposal; the reader separates them. Decided by the lead 11 Sep 2026: age, not a birth date; the worksheet column 生年月日・年齡 holds them as read."
     }
   ]
 }
