@@ -55,6 +55,7 @@ secrets/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-kit/
 venv/
 .pytest_cache/
 .ruff_cache/
