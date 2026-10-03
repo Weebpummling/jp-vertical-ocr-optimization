@@ -301,6 +301,27 @@ column with no seniority digits - and the reader marks them with
 is not a real entry. Row numbers never change; completeness, resume, the strip and
 the worksheet all leave marked columns out.
 
+## Volume kits (3 Oct 2026)
+
+A reader can be sent the whole workstation and one volume as a zip: unzip, double-click,
+read, send one small file back. No install, no network, no id-code screen. The lead
+builds a kit with `scripts/build_volume_kit.py` and merges what comes home with
+`scripts/merge_returned.py`; [docs/volume-kits.md](../docs/volume-kits.md) is the guide.
+
+| Piece | Where |
+|---|---|
+| Kit mode in the server: reader without a code, no fetching, the return package | `app/kit.py` |
+| Cutting a kit database and its data from the master | `app/kit_build.py` |
+| Merging a reader's return | `app/kit_merge.py` |
+| The program a reader double-clicks | `kit/launcher.py`, built by `scripts/build_kit_app.py` |
+| `GET /kit`, `POST /kit/return`, `GET /volumes/{pid}/next-page` | `app/api.py` |
+
+A kit never registers a page: the lead's machine does, when the kit is built, and the kit
+reads the result back (`page_service.load_stored`). Registration differs between OpenCV
+versions and between an original scan and a recompressed one on about 3% of pages, and a
+reading is recorded against an officer's position - so a kit that registered for itself
+could file readings under the wrong officer.
+
 ## Not built yet
 
 The seal/damage flag → alt-scan flip, and furigana capture. Layer 4 has two
