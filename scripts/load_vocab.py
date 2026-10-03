@@ -82,6 +82,22 @@ TABLES = {
 }
 
 
+def load(conn) -> dict[str, int]:
+    """Upsert the three vocabularies into an open database; rows written per table."""
+    cur = conn.cursor()
+    written = {}
+    for table, (csv_name, key, cols, to_values) in TABLES.items():
+        updates = ", ".join(f"{c} = excluded.{c}" for c in cols if c != key)
+        sql = (f"INSERT INTO {table} ({', '.join(cols)}) "
+               f"VALUES ({', '.join('?' for _ in cols)}) "
+               f"ON CONFLICT ({key}) DO UPDATE SET {updates}")
+        written[table] = 0
+        for row in rows(csv_name):
+            cur.execute(sql, to_values(row))
+            written[table] += 1
+    return written
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -97,16 +113,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     with db.session() as conn:
-        cur = conn.cursor()
-        for table, (csv_name, key, cols, to_values) in TABLES.items():
-            updates = ", ".join(f"{c} = excluded.{c}" for c in cols if c != key)
-            sql = (f"INSERT INTO {table} ({', '.join(cols)}) "
-                   f"VALUES ({', '.join('?' for _ in cols)}) "
-                   f"ON CONFLICT ({key}) DO UPDATE SET {updates}")
-            written = 0
-            for row in rows(csv_name):
-                cur.execute(sql, to_values(row))
-                written += 1
+        for table, written in load(conn).items():
             print(f"{table:<15} {written:>4} rows")
     return 0
 

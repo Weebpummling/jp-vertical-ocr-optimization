@@ -88,8 +88,10 @@ def create(path: str | Path) -> sqlite3.Connection:
     exist.
     """
     conn = connect(path)
-    conn.executescript(SCHEMA.read_text(encoding="utf-8"))
-    conn.commit()
+    # One transaction, not one per statement: on a file, each of the schema's
+    # forty-odd statements otherwise commits on its own, and creating an empty
+    # database took eight seconds on Windows instead of a twentieth of one.
+    conn.executescript("BEGIN;\n" + SCHEMA.read_text(encoding="utf-8") + "\nCOMMIT;")
     return conn
 
 

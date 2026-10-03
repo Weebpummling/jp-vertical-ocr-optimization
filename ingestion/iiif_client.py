@@ -29,10 +29,26 @@ USER_AGENT = "jp-vertical-ocr-optimization (research ingestion; polite, cached)"
 IMAGE_DELAY_S = 1.5
 
 
+class Offline(RuntimeError):
+    """A fetch was needed and this installation may not make one (a reader's kit)."""
+
+
 def _get(url: str, *, timeout: int = 60) -> bytes:
+    # A reader's kit carries its whole volume and runs with no network
+    # (app/kit.py). Anything it would have to fetch is a hole in the kit, and
+    # says so, rather than a download the reader never asked for.
+    if os.environ.get("JPOCR_OFFLINE", "") not in ("", "0"):
+        raise Offline("this copy works offline and does not have that page")
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
+
+
+def _say_cached(dest: Path) -> None:
+    # Worth saying when a fetch was possible. In a reader's kit every page is
+    # cached by construction, and the line would only fill its log.
+    if os.environ.get("JPOCR_OFFLINE", "") in ("", "0"):
+        print(f"cached: {dest}", file=sys.stderr)
 
 
 def manifest(pid: str) -> dict:
@@ -136,7 +152,7 @@ def fetch_page(pid: str, frame_no: int, *, out_dir: Path | None = None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     dest = out_dir / f"frame_{frame_no:04d}.jpg"
     if dest.exists() and dest.stat().st_size > 0:
-        print(f"cached: {dest}", file=sys.stderr)
+        _say_cached(dest)
         return dest
 
     man = manifest(pid)
@@ -180,7 +196,7 @@ def fetch_region(pid: str, frame_no: int, bbox: tuple[int, int, int, int]) -> Pa
     out_dir.mkdir(parents=True, exist_ok=True)
     dest = out_dir / f"frame_{frame_no:04d}_{x}_{y}_{w}x{h}.jpg"
     if dest.exists() and dest.stat().st_size > 0:
-        print(f"cached: {dest}", file=sys.stderr)
+        _say_cached(dest)
         return dest
     time.sleep(IMAGE_DELAY_S)
     data = _get(region_url(pid, frame_no, bbox), timeout=120)

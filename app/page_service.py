@@ -21,11 +21,14 @@ Two rules from the standing commitments shape the shape of the output:
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 from dataclasses import dataclass, field as dc_field, replace
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "reading"))
 import registration as R  # noqa: E402
@@ -335,13 +338,119 @@ def register_spread(image, pid: str, frame: int, **kwargs) -> RegisteredPage:
     )
 
 
+def read_image(path: str | Path, flags: int = cv2.IMREAD_GRAYSCALE):
+    """`cv2.imread` for any path; None when the file cannot be read.
+
+    On Windows OpenCV opens files through the ANSI code page, so a scan under
+    C:\\Users\\田中\\... comes back as None although the file is there - and a
+    reader's kit lands exactly in such a folder. Reading the bytes ourselves and
+    decoding from memory has no such limit.
+    """
+    try:
+        data = np.fromfile(str(path), dtype=np.uint8)
+    except OSError:
+        return None
+    return cv2.imdecode(data, flags) if data.size else None
+
+
+def write_image(path: str | Path, image) -> bool:
+    """`cv2.imwrite` for any path, for the same reason as `read_image`."""
+    ok, data = cv2.imencode(Path(path).suffix or ".png", image)
+    if ok:
+        data.tofile(str(path))
+    return bool(ok)
+
+
+# --------------------------------------------------------------------------
+# stored registrations - a page registered once, and read back everywhere else
+# --------------------------------------------------------------------------
+#
+# Registration is arithmetic on pixels, and it is not stable across machines: on
+# 97 sampled pages, three registered with a different number of officers under
+# OpenCV 5 than under OpenCV 4.8, and three more once the scan had been
+# recompressed. An observation is recorded against `row_index`, so a reader's
+# copy that counts columns differently from the master would file a reading
+# under the wrong officer - silently.
+#
+# So a reader's kit does not register anything. The lead's machine registers
+# every page when the kit is built (app/kit_build.py) and ships the result; the
+# kit reads it back. The geometry a reader records against is then the lead's
+# own, whatever libraries or image quality the kit carries.
+
+STORED_DIR = "registered"
+
+
+def stored_path(pid: str, frame: int, home: str | Path | None = None) -> Path | None:
+    home = home or os.environ.get("JP_OCR_DATA")
+    if not home:
+        return None
+    return Path(home) / "cache" / pid / STORED_DIR / f"frame_{frame:04d}.json"
+
+
+def page_from_dict(d: dict, url_for=None) -> RegisteredPage:
+    """The inverse of `RegisteredPage.as_dict`. Derived keys in `d` are ignored."""
+    pid, frame = d["pid"], d["frame"]
+    officers = []
+    for o in d["officers"]:
+        cells = [Cell(field=c["field"], bbox=tuple(c["bbox"]), suspect=c["suspect"],
+                      confirmed_label=c["confirmed_label"],
+                      crop_url=url_for(pid, frame, tuple(c["bbox"])) if url_for else None)
+                 for c in o["cells"]]
+        officers.append(Officer(
+            index=o["index"], bbox=tuple(o["bbox"]), cells=cells,
+            crop_url=url_for(pid, frame, tuple(o["bbox"])) if url_for else None,
+            panel=o["panel"], column=o["column"]))
+    return RegisteredPage(
+        pid=pid, frame=frame, panel=d["panel"], template_id=d["template_id"],
+        skew_deg=d["skew_deg"], bands_matched=d["bands_matched"],
+        bands_total=d["bands_total"], explained_frac=d["explained_frac"],
+        officers=officers, panels_total=d["panels_total"],
+        panels_registered=tuple(d["panels_registered"]))
+
+
+def store_registration(home: str | Path, pid: str, frame: int,
+                       page: RegisteredPage | None, reason: str | None = None) -> Path:
+    """Write one page's registration - or why it has none - under a data home."""
+    path = stored_path(pid, frame, home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = page.as_dict() if page is not None else {"not_registrable": reason or ""}
+    path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def load_stored(pid: str, frame: int, url_for=None) -> RegisteredPage | None:
+    """A stored registration, if this data home has one for the page.
+
+    Raises PageNotRegistrable when what was stored is that the page has no
+    officer grid. Where nothing may be fetched (a reader's kit, JPOCR_OFFLINE)
+    a page with nothing stored is an error rather than a cue to register it
+    here: computing it locally is exactly what a kit exists not to do.
+    """
+    path = stored_path(pid, frame)
+    if path is not None and path.exists():
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        if "not_registrable" in doc:
+            raise PageNotRegistrable(doc["not_registrable"]
+                                     or f"{pid} frame {frame}: no officer grid")
+        return page_from_dict(doc, url_for)
+    if os.environ.get("JPOCR_OFFLINE", "") not in ("", "0"):
+        raise PageNotRegistrable(
+            f"{pid} frame {frame}: this kit carries no registration for the page")
+    return None
+
+
 def register_file(path: str | Path, pid: str, frame: int, **kwargs) -> RegisteredPage:
     """Register a cached page image from disk.
 
     `panel=None` (the default) registers the whole spread; an explicit `panel`
-    registers that leaf alone.
+    registers that leaf alone. A whole-spread registration already stored for
+    this page (see above) is returned as it is, without looking at the image.
     """
-    image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if kwargs.get("panel") is None and "templates" not in kwargs and "scale" not in kwargs:
+        stored = load_stored(pid, frame, kwargs.get("url_for"))
+        if stored is not None:
+            return stored
+    image = read_image(path)
     if image is None:
         raise FileNotFoundError(f"cannot read page image: {path}")
     if kwargs.get("panel") is None:

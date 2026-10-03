@@ -787,7 +787,7 @@ def _image_services(pid: str) -> dict[int, str]:
 
 
 def _name_crops(image_path: Path, rows: list[OfficerRow]) -> dict[str, bytes]:
-    image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+    image = ps.read_image(image_path)
     if image is None:
         return {}
     out = {}

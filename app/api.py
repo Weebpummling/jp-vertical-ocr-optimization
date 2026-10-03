@@ -34,6 +34,7 @@ import eradate  # noqa: E402
 import proposal_service as props  # noqa: E402
 import volume_service as vs  # noqa: E402
 import cell_ocr  # noqa: E402
+import kit  # noqa: E402
 
 app = FastAPI(
     title="jp-vertical-ocr-optimization workstation",
@@ -68,6 +69,11 @@ def current_user(x_annotator: str | None = Header(default=None)) -> dict:
     place a secret gets copied into a log file or a screenshot.
     """
     if not x_annotator:
+        # A reader's kit is theirs alone: with no code offered, the work is
+        # attributed to the reader the kit was built for (app/kit.py).
+        owner = kit.reader()
+        if owner:
+            return owner
         raise HTTPException(status_code=401, detail="id code required (X-Annotator header)")
     user = db.find_user(x_annotator.strip())
     if not user:
@@ -80,6 +86,34 @@ def whoami(user: dict = Depends(current_user)) -> dict:
     """Who this code belongs to. Deliberately does not echo the code itself."""
     return {"user_id": str(user["user_id"]),
             "display_name": user["display_name"] or "(unnamed)"}
+
+
+@app.get("/kit")
+def kit_info() -> dict:
+    """Whether this is a reader's kit, and if so whose and for which volume.
+
+    The UI asks this first: in a kit there is no id-code gate, the volume is
+    fixed, and the work is sent home with `GET /kit/return`.
+    """
+    return kit.info()
+
+
+@app.post("/kit/return")
+def kit_return(reveal: bool = Query(True, description="open the folder with the file selected"),
+               user: dict = Depends(current_user)) -> dict:
+    """Pack the reader's work into one file to send home (app/kit.py).
+
+    Written into the kit's own `outbox` folder and shown there, rather than
+    handed to the browser as a download: where a browser puts a download, and
+    whether it asks first, differs on every machine, and "it is in the folder
+    that just opened" does not.
+    """
+    if kit.assignment() is None:
+        raise HTTPException(status_code=404, detail="this is not a reader's kit")
+    path = kit.build_return()
+    if reveal:
+        kit.reveal(path)
+    return {"file": path.name, "folder": path.parent.name, "bytes": path.stat().st_size}
 
 
 @app.get("/health")
@@ -208,7 +242,7 @@ def page_region(pid: str, frame: int,
     except SystemExit as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    image = ps.read_image(path)
     if image is None:
         raise HTTPException(status_code=500, detail=f"unreadable page image: {path}")
     ih, iw = image.shape[:2]
@@ -484,6 +518,14 @@ def volume_progress(pid: str) -> dict:
         "observations": sum(f["observations"] for f in frames),
         "frames": frames,
     }
+
+
+@app.get("/volumes/{pid}/next-page")
+def next_page(pid: str, after: int = Query(0, ge=0)) -> dict:
+    """The next page with officers still to read - see volume_service.next_unread."""
+    if not db.volume_frames(pid):
+        raise HTTPException(status_code=404, detail=f"{pid} is not registered")
+    return {"pid": pid, "after": after, "frame": vs.next_unread(pid, after)}
 
 
 def _survey_quietly(pid: str, frame: int, entry: dict) -> None:

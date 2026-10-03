@@ -539,7 +539,7 @@ def page_context(pid: str, frame: int) -> PageContext:
     spec = [(o.index, c.field, tuple(c.bbox), c.suspect)
             for o in page.officers for c in o.cells]
     ndl_cells, _ = binning.bin_page(lines, spec)
-    image = cv2.imread(str(path))
+    image = ps.read_image(path, cv2.IMREAD_COLOR)
     if image is None:
         raise WorkerError(f"cannot read the page image {path}")
     return PageContext(pid, frame, page,
@@ -557,7 +557,7 @@ def read_cell(worker: Worker, ctx: PageContext, officer: ps.Officer, field: str,
     for n, (box, margin) in enumerate(crops):
         crop, origin = crop_image(ctx.image, box, margin)
         path = scratch / f"f{ctx.frame:04d}_o{officer.index:02d}_{field}_{n}.png"
-        cv2.imwrite(str(path), crop)
+        ps.write_image(path, crop)
         try:
             reply = worker.read(path)
         finally:

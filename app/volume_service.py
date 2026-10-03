@@ -273,6 +273,24 @@ def page_statuses(pid: str) -> dict:
     }
 
 
+def next_unread(pid: str, after: int) -> int | None:
+    """The next page that still has officers to read, after frame `after`.
+
+    Skips what "frame + 1" cannot: front matter, index pages, pages already
+    finished. Wraps to the start of the volume, so a reader who jumped ahead is
+    brought back to what they passed; None when nothing is left anywhere. A
+    page with a leaf that did not register counts as done once every officer
+    it can show is recorded - there is nothing more to read on it from here.
+    """
+    open_pages = [p["frame"] for p in page_statuses(pid)["pages"]
+                  if p.get("officers") and p["rows_read"] < p["officers"]
+                  and p["frame"] != after]
+    later = [f for f in open_pages if f > after]
+    if later:
+        return later[0]
+    return open_pages[0] if open_pages else None
+
+
 def volumes() -> list[dict]:
     """Registered volumes, each with its survey and cache coverage."""
     out = []

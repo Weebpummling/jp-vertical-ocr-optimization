@@ -99,6 +99,9 @@ def _fetch_fulltext(pid: str, dest: Path) -> None:
     internet-public, and signing in does not change that. It is reported as such
     rather than as a network failure, because nothing retrying will fix it.
     """
+    if os.environ.get("JPOCR_OFFLINE", "") not in ("", "0"):
+        raise ProposalsUnavailable(f"NDL's OCR for {pid} is not in this copy, "
+                                   f"and it works offline")
     req = urllib.request.Request(FULLTEXT_URL.format(pid=pid),
                                  headers={"User-Agent": USER_AGENT})
     try:
