@@ -520,3 +520,26 @@ kbd {
   background: #f7f3fb;
   font-size: 0.8rem;
 }
+
+/* ---- a reader's kit ---- */
+.kitvolume { font: 600 0.85rem/1.2 var(--font-jp); color: var(--ink); max-width: 22rem; }
+.sendwork {
+  padding: 0.25rem 0.8rem;
+  border: 1px solid var(--accent);
+  background: #fff;
+  color: var(--accent);
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+.sendwork:hover { background: var(--accent); color: #fff; }
+.notice {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.7rem 1rem;
+  background: #eef6ee;
+  border-bottom: 1px solid #9cc39c;
+}
+.notice p { margin: 0; flex: 1; }

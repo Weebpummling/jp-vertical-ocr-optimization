@@ -72,8 +72,27 @@ export class NotIdentified extends Error {}
 
 const BASE = "/api";
 
+/**
+ * `fetch`, with the one failure a reader can fix said in words. A request that
+ * never reaches the server means the program behind this page has stopped -
+ * in a kit, usually because its small window was closed - and "TypeError:
+ * Failed to fetch" tells nobody that.
+ */
+async function reach(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new Error(
+      kitMode
+        ? 'The transcription program is not running. Start "Start Transcription" again ' +
+          "from your kit folder, then reload this page. Everything you recorded is saved."
+        : "The workstation is not answering. Is it still running?",
+    );
+  }
+}
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await reach(`${BASE}${path}`);
   if (res.status === 422) {
     const body = await res.json().catch(() => ({ detail: "unregistrable" }));
     throw new PageNotRegistrable(body.detail);
@@ -109,11 +128,13 @@ async function send<T>(
   init: { method?: string; body?: unknown; code?: string } = {},
 ): Promise<T> {
   const code = init.code ?? storedIdCode();
-  if (!code) throw new NotIdentified("no id code entered");
-  const res = await fetch(`${BASE}${path}`, {
+  // In a reader's kit there is no code to send: the server attributes the work
+  // to the reader the kit was built for.
+  if (!code && !kitMode) throw new NotIdentified("no id code entered");
+  const res = await reach(`${BASE}${path}`, {
     method: init.method ?? "GET",
     headers: {
-      "X-Annotator": code,
+      ...(code ? { "X-Annotator": code } : {}),
       ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
@@ -128,6 +149,39 @@ async function send<T>(
   }
   return res.json() as Promise<T>;
 }
+
+// --------------------------------------------------------------------------
+// a reader's kit - one volume, one reader, sent as a zip (app/kit.py)
+// --------------------------------------------------------------------------
+
+export interface KitInfo {
+  kit: boolean;
+  pid?: string;
+  title?: string | null;
+  reader?: string;
+  /** Where the reader sends their work, in the lead's words. */
+  return_to?: string | null;
+  /** The first page with officers still to read; null when none is left. */
+  start_frame?: number | null;
+  readings_by_reader?: number;
+}
+
+let kitMode = false;
+export const setKitMode = (on: boolean) => {
+  kitMode = on;
+};
+
+export const fetchKit = () => get<KitInfo>("/kit");
+
+/** Pack the reader's work into one file in the kit's outbox, and show it there. */
+export const sendWorkHome = () =>
+  send<{ file: string; folder: string; bytes: number }>("/kit/return", { method: "POST" });
+
+/** The next page with officers still to read; null when the volume has none. */
+export const fetchNextPage = (pid: string, after: number) =>
+  get<{ frame: number | null }>(
+    `/volumes/${encodeURIComponent(pid)}/next-page?after=${after}`,
+  );
 
 /** Resolve an id code to the worker it belongs to; the identity gate's check. */
 export const whoami = (code?: string) => send<Worker>("/whoami", { code });

@@ -20,6 +20,11 @@ import {
   storedIdCode,
   whoami,
   fetchVolumeProgress,
+  fetchNextPage,
+  fetchKit,
+  setKitMode,
+  sendWorkHome,
+  type KitInfo,
   fetchProposals,
   fetchCellOcr,
   rereadCell,
@@ -87,7 +92,7 @@ function startPlace(): { pid: string; frame: number } {
   return linked ? { pid: linked.pid, frame: linked.frame } : lastPlace();
 }
 
-function lastPlace(): { pid: string; frame: number } {
+function storedPlace(): { pid: string; frame: number } | null {
   try {
     const raw = localStorage.getItem(PLACE_KEY);
     if (raw) {
@@ -97,11 +102,35 @@ function lastPlace(): { pid: string; frame: number } {
   } catch {
     // A corrupt or unreadable entry is not worth failing to start over.
   }
-  return { pid: DEFAULT_PID, frame: DEFAULT_FRAME };
+  return null;
+}
+
+function lastPlace(): { pid: string; frame: number } {
+  return storedPlace() ?? { pid: DEFAULT_PID, frame: DEFAULT_FRAME };
+}
+
+// A reader's kit holds one volume. It opens where this browser left off in
+// that volume, and otherwise on the first page with officers still to read -
+// never on a volume the kit does not carry.
+function kitPlace(kit: KitInfo): { pid: string; frame: number } {
+  const pid = kit.pid ?? DEFAULT_PID;
+  const linked = urlPlace();
+  if (linked && linked.pid === pid) return { pid, frame: linked.frame };
+  const last = storedPlace();
+  if (last && last.pid === pid) return last;
+  return { pid, frame: kit.start_frame ?? 1 };
 }
 
 export default function App() {
   const [worker, setWorker] = useState<Worker | null>(null);
+  // Set when this is a reader's kit: one volume, no id-code gate, and the work
+  // goes home as a file.
+  const [kit, setKit] = useState<KitInfo | null>(null);
+  const [workSent, setWorkSent] = useState<{ file: string; folder: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  // The next page with officers still to read, as the server sees it: null when
+  // nothing is left, undefined when it could not say.
+  const [nextToRead, setNextToRead] = useState<number | null | undefined>(undefined);
   const [identityChecked, setIdentityChecked] = useState(false);
   const [gateNotice, setGateNotice] = useState<string | null>(null);
 
@@ -161,6 +190,13 @@ export default function App() {
   // finished officer must not post a second draft; editing one deliberately
   // should.
   const savedSnapshot = useRef<Record<number, string>>({});
+  // Saves on their way to the server. A second request to record the same
+  // officer with the same values - a double click, a page turn or "Send in my
+  // work" while the first is still in flight - waits for the first instead of
+  // posting a duplicate draft.
+  const savesInFlight = useRef<
+    Record<number, { page: string; snapshot: string; done: Promise<void> }>
+  >({});
   // `roster_cell` rows are a per-page precondition for saving, and the endpoint
   // is idempotent, so it runs once per page rather than once per officer.
   const cellsEnsured = useRef<Set<string>>(new Set());
@@ -172,21 +208,48 @@ export default function App() {
   // A stored code is checked before the workstation opens: a code that has been
   // rotated should fail here, not after an hour of transcription.
   useEffect(() => {
-    if (!storedIdCode()) {
-      setIdentityChecked(true);
-      return;
-    }
-    whoami()
-      .then(setWorker)
-      .catch((e) => {
-        forgetIdCode();
-        if (e instanceof NotIdentified) {
-          setGateNotice("The code stored in this browser is no longer recognized.");
-        } else {
-          setGateNotice(`Could not reach the workstation API: ${e}`);
+    let cancelled = false;
+    (async () => {
+      // A reader's kit is theirs alone: no code to type, the server knows whose
+      // work this is.
+      const info = await fetchKit().catch((): KitInfo => ({ kit: false }));
+      if (cancelled) return;
+      if (info.kit) {
+        setKitMode(true);
+        setKit(info);
+        try {
+          const who = await whoami();
+          if (!cancelled) setWorker(who);
+        } catch (e) {
+          if (!cancelled) setGateNotice(`This kit could not be opened: ${e}`);
+        } finally {
+          if (!cancelled) setIdentityChecked(true);
         }
-      })
-      .finally(() => setIdentityChecked(true));
+        return;
+      }
+      if (!storedIdCode()) {
+        setIdentityChecked(true);
+        return;
+      }
+      whoami()
+        .then((who) => {
+          if (!cancelled) setWorker(who);
+        })
+        .catch((e) => {
+          forgetIdCode();
+          if (e instanceof NotIdentified) {
+            setGateNotice("The code stored in this browser is no longer recognized.");
+          } else {
+            setGateNotice(`Could not reach the workstation API: ${e}`);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIdentityChecked(true);
+        });
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -277,6 +340,13 @@ export default function App() {
         fetchVolumeProgress(p)
           .then(setProgress)
           .catch(() => setProgress(null));
+        fetchNextPage(p, f)
+          .then((next) => {
+            if (token === loadToken.current) setNextToRead(next.frame);
+          })
+          .catch(() => {
+            if (token === loadToken.current) setNextToRead(undefined);
+          });
 
         // Resume where the page was left, rather than at an officer already
         // done. Half-finished pages are the normal case once more than one
@@ -316,9 +386,11 @@ export default function App() {
     // rather than from `pid`/`frame`, so that editing those boxes never
     // re-triggers a load behind the reader's back.
     if (!worker) return;
-    const place = startPlace();
+    const place = kit?.kit ? kitPlace(kit) : startPlace();
+    setPid(place.pid);
+    setFrame(place.frame);
     load(place.pid, place.frame);
-  }, [worker, load]);
+  }, [worker, load, kit]);
 
   const officer = page?.officers[officerIndex];
   const activeCell = useMemo(
@@ -620,12 +692,17 @@ export default function App() {
       const values = valuesFor(index);
       const snapshot = JSON.stringify(values);
       if (savedSnapshot.current[index] === snapshot) return; // already recorded, unchanged
+      const pageKey = `${page.pid}:${page.frame}`;
+      const pending = savesInFlight.current[index];
+      if (pending?.page === pageKey && pending.snapshot === snapshot) {
+        return pending.done; // the same save, on its way
+      }
       // Materialize it, so stepping back to this officer shows what was saved
       // rather than re-deriving a suggestion.
       setEntries((prev) => ({ ...prev, [index]: values }));
 
       setSaves((s) => ({ ...s, [index]: { state: "saving" } }));
-      const pageKey = `${page.pid}:${page.frame}`;
+      const done = (async () => {
       try {
         if (!cellsEnsured.current.has(pageKey)) {
           await createCells(page.pid, page.frame);
@@ -673,6 +750,13 @@ export default function App() {
           ...s,
           [index]: { state: "error", message: (e as Error).message ?? String(e) },
         }));
+      }
+      })();
+      savesInFlight.current[index] = { page: pageKey, snapshot, done };
+      try {
+        await done;
+      } finally {
+        if (savesInFlight.current[index]?.done === done) delete savesInFlight.current[index];
       }
     },
     [page, entries, valuesFor, vocab, signOut, takenFrom],
@@ -756,6 +840,10 @@ export default function App() {
   const readFrames = new Set(progress?.frames.map((f) => f.frame_no) ?? []);
   let nextUnread = frame + 1;
   while (readFrames.has(nextUnread)) nextUnread++;
+  // The server knows better: it skips front matter and index pages, which
+  // "the next frame nobody has touched" walks straight into.
+  if (typeof nextToRead === "number") nextUnread = nextToRead;
+  const noneLeft = nextToRead === null;
 
   const openFrame = async (target: number) => {
     await commitRef.current?.();
@@ -781,10 +869,16 @@ export default function App() {
             load(pid, frame);
           }}
         >
-          <label>
-            pid
-            <input value={pid} onChange={(e) => setPid(e.target.value)} size={9} />
-          </label>
+          {kit?.kit ? (
+            <span className="kitvolume" title={`volume ${pid}`}>
+              {kit.title ?? pid}
+            </span>
+          ) : (
+            <label>
+              pid
+              <input value={pid} onChange={(e) => setPid(e.target.value)} size={9} />
+            </label>
+          )}
           <label>
             frame
             <input
@@ -863,14 +957,20 @@ export default function App() {
             {savedCount >= liveOfficers &&
               liveOfficers > 0 &&
               (page.panels_missing.length === 0 ? (
-                <button
-                  type="button"
-                  className="tag tag--done tag--action"
-                  onClick={() => openFrame(nextUnread)}
-                  title="Record anything in hand and open the next page nobody has read"
-                >
-                  page complete — next unread page {nextUnread} ›
-                </button>
+                noneLeft ? (
+                  <span className="tag tag--done">
+                    page complete — no other page has officers left to read
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="tag tag--done tag--action"
+                    onClick={() => openFrame(nextUnread)}
+                    title="Record anything in hand and open the next page with officers still to read"
+                  >
+                    page complete — next unread page {nextUnread} ›
+                  </button>
+                )
               ) : (
                 <span className="tag tag--suspect">
                   every officer this page can show is recorded — but a leaf is
@@ -887,7 +987,7 @@ export default function App() {
             {readFrames.has(frame) && (
               <span className="tag tag--done">this page has readings</span>
             )}
-            {nextUnread !== frame + 1 && (
+            {nextUnread !== frame + 1 && !noneLeft && (
               <button
                 type="button"
                 className="linkish"
@@ -903,11 +1003,49 @@ export default function App() {
         )}
         <p className="whoami">
           recording as <strong>{worker.display_name}</strong>
-          <button type="button" className="linkish" onClick={() => signOut()}>
-            not you?
-          </button>
+          {kit?.kit ? (
+            <button
+              type="button"
+              className="sendwork"
+              title="Save everything you have read so far as one file to send back"
+              disabled={sending}
+              onClick={async () => {
+                setSending(true);
+                try {
+                  // The officer in hand goes too.
+                  await commitRef.current?.();
+                  setWorkSent(await sendWorkHome());
+                } catch (e) {
+                  setError(`Your work could not be packed to send: ${(e as Error).message ?? e}`);
+                } finally {
+                  setSending(false);
+                }
+              }}
+            >
+              {sending ? "packing…" : "Send in my work"}
+            </button>
+          ) : (
+            <button type="button" className="linkish" onClick={() => signOut()}>
+              not you?
+            </button>
+          )}
         </p>
       </header>
+
+      {workSent && (
+        <div className="notice">
+          <p>
+            <strong>Your work was saved as a file</strong> named <code>{workSent.file}</code>,
+            in the <code>{workSent.folder}</code> folder of your kit — a window has opened
+            showing it. {kit?.return_to ?? "Send that file to the person who gave you this kit."}{" "}
+            You can keep reading and send again whenever you like; each file holds everything
+            so far.
+          </p>
+          <button type="button" className="linkish" onClick={() => setWorkSent(null)}>
+            close
+          </button>
+        </div>
+      )}
 
       {error && <div className="error">{error}</div>}
       {dbWarning && <div className="warning">{dbWarning}</div>}
@@ -935,7 +1073,7 @@ export default function App() {
             onJump={jumpTo}
             focusTick={focusTick}
             pageComplete={pageComplete}
-            nextPageLabel={pageComplete ? `next unread page ${nextUnread}` : null}
+            nextPageLabel={pageComplete && !noneLeft ? `next unread page ${nextUnread}` : null}
             onNextPage={() => openFrame(nextUnread)}
             marked={rowAudit[officerIndex] === "extra_row"}
             columnKind={officerProposals?.column_kind ?? null}
@@ -966,6 +1104,7 @@ export default function App() {
             onReread={rereadField}
             autoZoom={autoZoom}
             onAutoZoom={changeAutoZoom}
+            quietEngine={Boolean(kit?.kit)}
           />
         </main>
       )}

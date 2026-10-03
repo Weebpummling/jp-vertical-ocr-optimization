@@ -104,6 +104,8 @@ interface Props {
   /** Start a zoom-read of every page as it is opened. */
   autoZoom: boolean;
   onAutoZoom: (on: boolean) => void;
+  /** A reader's kit ships without the engine: say nothing about it being absent. */
+  quietEngine?: boolean;
 }
 
 export function Candidates({
@@ -127,6 +129,7 @@ export function Candidates({
   onReread,
   autoZoom,
   onAutoZoom,
+  quietEngine = false,
 }: Props) {
   const takeable = wholesaleTakes(proposals, values);
   const running = ocrJob?.state === "running";
@@ -208,7 +211,9 @@ export function Candidates({
 
         <div className="zoomocr">
           {engineDown ? (
-            <p className="muted">Zoomed re-reading is unavailable: {engine?.reason}</p>
+            !quietEngine && (
+              <p className="muted">Zoomed re-reading is unavailable: {engine?.reason}</p>
+            )
           ) : (
             <p className="zoomocr__line">
               <button
@@ -290,15 +295,17 @@ export function Candidates({
                     {p ? METHOD[p.method] : "no NDL reading"}
                     {p?.suspect ? " · cell edge inferred" : ""}
                   </span>
-                  <button
-                    type="button"
-                    className="prop__reread linkish"
-                    onClick={() => onReread(name)}
-                    disabled={busy || engineDown}
-                    title="Read this cell again, zoomed in, with NDLOCR-Lite"
-                  >
-                    {busy ? "reading…" : "zoom-read"}
-                  </button>
+                  {!(engineDown && quietEngine) && (
+                    <button
+                      type="button"
+                      className="prop__reread linkish"
+                      onClick={() => onReread(name)}
+                      disabled={busy || engineDown}
+                      title="Read this cell again, zoomed in, with NDLOCR-Lite"
+                    >
+                      {busy ? "reading…" : "zoom-read"}
+                    </button>
+                  )}
                   {p?.method === "refused" && p.note && (
                     <span className="prop__why">{p.note}</span>
                   )}
