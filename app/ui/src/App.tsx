@@ -442,8 +442,17 @@ export default function App() {
         };
       }
       const carried: Values = {};
+      const label = (kind: "ranks" | "branches", code: string | null) =>
+        (code && vocab?.[kind].find((v) => v.code === code)?.ja) || "";
       for (let i = index - 1; i >= 0; i--) {
-        const prev = entries[i];
+        // What was typed this session - or, on a page picked up half read, what
+        // is already on record for the officer above.
+        const was = recorded[i];
+        const prev =
+          entries[i] ??
+          (was
+            ? { branch: label("branches", was.branch_code), rank: label("ranks", was.rank_code) }
+            : undefined);
         if (!prev) continue;
         if (!carried.branch && prev.branch) carried.branch = prev.branch;
         if (!carried.rank && prev.rank) carried.rank = prev.rank;
@@ -509,6 +518,28 @@ export default function App() {
         ndl: officerProposals?.fields[spec.cell],
         reading: cellOcr?.results[`${officer.index}:${spec.cell}`],
       };
+    }
+    // 兵科 and 階級 have no cell: they are printed once per leaf, in the margin. Where NDL
+    // read that label and it names one section, it is offered like any reading -
+    // to take, never filled in.
+    const section = officerProposals?.section;
+    if (section) {
+      const offer = (key: "branch" | "rank", ja: string) => {
+        out[key] = {
+          ndl: {
+            value: ja,
+            raw: section.text,
+            method: "ndl-ocr",
+            note: `from the section label printed in the margin: ${section.text}`,
+            suspect: false,
+            fill: ja,
+            form_key: key,
+            wholesale: true,
+          },
+        };
+      };
+      offer("branch", section.branch.ja);
+      offer("rank", section.rank.ja);
     }
     return out;
   }, [officer, officerProposals, cellOcr]);

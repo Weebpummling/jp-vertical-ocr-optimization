@@ -69,6 +69,8 @@ LEGEND_WORDS = ("次列", "氏名", "期別", "出身", "命課", "現任官", "
 # Bands a section label is printed across - never the post, which an officer has.
 LABEL_BANDS = ("service_in_rank", "rank_date", "prev_rank_date", "commissioning_date",
                "appointment_dates")
+# How far outside a leaf's table, in officer-column widths, its section label can sit.
+SECTION_LABEL_REACH = 3
 
 # A parsed volume is ~35 MB of JSON. Keep the two most recent in memory - the
 # volume being worked and the one it was compared against - and no more.
@@ -216,6 +218,53 @@ def birth_as_read(cell) -> str:
     return "".join(l.text for l in sorted(lines, key=lambda l: l.ymin))
 
 
+def section_label(texts: list[str], vocab: dict) -> dict | None:
+    """The branch and rank a page's section label names - when it names exactly one.
+
+    兵科 and 階級 have no cell: they are printed once, in the margin of each leaf
+    (步兵中佐) or as the heading of a section (步兵第二十八聯隊中尉 on the Taishō
+    pages), and a reader otherwise types them again on every page. NDL reads
+    that label on most pages, outside the table.
+
+    A text counts when it ends in a rank and names a branch before it, both
+    from the controlled vocabulary, kanji variants folded. Narrow on purpose:
+    a page that carries two different labels - one section ending, the next
+    beginning - yields nothing, because which officers fall under which is for
+    the reader to see on the page.
+    """
+    table = {e["variant"]: e["canonical"] for e in vocab.get("kanji_variants", [])
+             if e.get("variant") and e.get("canonical")}
+
+    def fold(text: str) -> str:
+        return "".join(table.get(ch, ch) for ch in text)
+
+    def labels(group: str) -> list[tuple[str, dict]]:
+        out = [(fold(label), entry) for entry in vocab.get(group, [])
+               for label in [entry.get("ja"), *(entry.get("variants") or [])] if label]
+        return sorted(out, key=lambda pair: -len(pair[0]))      # 野戦砲兵 before 砲兵
+
+    branches, ranks = labels("branches"), labels("ranks")
+    found: dict[tuple[str, str], dict] = {}
+    for raw in texts:
+        text = "".join(str(raw).split())
+        folded = fold(text)
+        rank = next(((label, entry) for label, entry in ranks if folded.endswith(label)), None)
+        if rank is None:
+            continue
+        head = folded[:-len(rank[0])]
+        branch = next((entry for label, entry in branches if label in head), None)
+        if branch is None:
+            continue
+        key = (branch["ja"], rank[1]["ja"])
+        hit = found.setdefault(key, {
+            "text": text,
+            "branch": {"code": branch.get("code"), "ja": branch["ja"]},
+            "rank": {"code": rank[1].get("code"), "ja": rank[1]["ja"]},
+            "seen": 0})
+        hit["seen"] += 1
+    return next(iter(found.values())) if len(found) == 1 else None
+
+
 def propose_registered(page: ps.RegisteredPage,
                        lines: list[ndl_lines.BoxedLine],
                        vocab: dict | None = None) -> dict:
@@ -256,6 +305,30 @@ def propose_registered(page: ps.RegisteredPage,
             "column_kind": column_kind(entries, vocab),
             "fields": entries,
         })
+    # Each leaf carries its own section label, and the two leaves of a spread can
+    # sit in different sections (中尉 on the right, 少尉 on the left). A label
+    # belongs to the leaf it is printed beside - within a few officer-widths of
+    # that leaf's table, so the label of a leaf that did not register is not
+    # handed to the one that did. A label column inside the grid counts for its
+    # own leaf.
+    spans: dict[int, list[float]] = {}
+    for o in page.officers:
+        x, _, w, _ = o.bbox
+        span = spans.setdefault(o.panel, [x, x + w, w])
+        span[0], span[1] = min(span[0], x), max(span[1], x + w)
+    texts: dict[int, list[str]] = {panel: [] for panel in spans}
+    for line in outside:
+        cx = (line.xmin + line.xmax) / 2
+        near = min(spans, key=lambda p: max(spans[p][0] - cx, cx - spans[p][1], 0), default=None)
+        if near is not None and max(spans[near][0] - cx, cx - spans[near][1], 0) \
+                <= SECTION_LABEL_REACH * spans[near][2]:
+            texts[near].append(line.text)
+    for o in officers:
+        if o["column_kind"]["kind"] == "section_label":
+            texts[o["panel"]] += [o["fields"][b]["raw"] for b in LABEL_BANDS if b in o["fields"]]
+    sections = {panel: section_label(found, vocab) for panel, found in texts.items()}
+    for o in officers:
+        o["section"] = sections.get(o["panel"])
     return {"officers": officers, "lines_outside": [l.text for l in outside]}
 
 

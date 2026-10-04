@@ -394,6 +394,12 @@ export interface FieldProposal {
 }
 
 export interface OfficerProposals {
+  /** The branch and rank named by the section label printed beside this officer's leaf. */
+  section?: {
+    text: string;
+    branch: { code: string | null; ja: string };
+    rank: { code: string | null; ja: string };
+  } | null;
   index: number;
   panel: number;
   column: number;

@@ -133,6 +133,68 @@ VOCAB = {"branches": [{"ja": "歩兵", "variants": ["步兵"]}],
          "ranks": [{"ja": "中佐", "variants": []}]}
 
 
+SECTION_VOCAB = {
+    "branches": [{"code": "hohei", "ja": "歩兵", "variants": ["步兵"]},
+                 {"code": "hohei_ho", "ja": "砲兵", "variants": []},
+                 {"code": "yasen_ho", "ja": "野戦砲兵", "variants": ["野砲兵"]}],
+    "ranks": [{"code": "chusa", "ja": "中佐", "variants": []},
+              {"code": "chui", "ja": "中尉", "variants": []},
+              {"code": "shosho", "ja": "少将", "variants": []}],
+    "kanji_variants": [{"variant": "步", "canonical": "歩"}, {"variant": "將", "canonical": "将"}],
+}
+
+
+class SectionLabelTests(unittest.TestCase):
+    """兵科 and 階級 are printed once per leaf, in the margin - not in any cell."""
+
+    def label(self, *texts):
+        return props.section_label(list(texts), SECTION_VOCAB)
+
+    def test_the_margin_label_names_branch_and_rank(self):
+        got = self.label("步兵中佐", "一六六")
+        self.assertEqual((got["branch"]["code"], got["rank"]["code"]), ("hohei", "chusa"))
+        self.assertEqual(got["branch"]["ja"], "歩兵")
+
+    def test_both_leaves_carrying_the_same_label_is_one_label(self):
+        self.assertEqual(self.label("步兵中佐", "歩兵中佐")["seen"], 2)
+
+    def test_a_regiment_heading_still_names_branch_and_rank(self):
+        got = self.label("步兵第二十八聯隊中尉", "(第七師團)")
+        self.assertEqual((got["branch"]["code"], got["rank"]["code"]), ("hohei", "chui"))
+
+    def test_the_longer_branch_name_wins(self):
+        self.assertEqual(self.label("野砲兵中尉")["branch"]["code"], "yasen_ho")
+
+    def test_an_old_form_rank_is_folded(self):
+        self.assertEqual(self.label("少將"), None)        # a rank alone names no branch
+        self.assertEqual(self.label("砲兵少將")["rank"]["code"], "shosho")
+
+    def test_two_different_labels_on_one_page_propose_nothing(self):
+        """One section ends and the next begins: the reader decides who is where."""
+        self.assertIsNone(self.label("步兵中佐", "步兵中尉"))
+
+    def test_a_misread_label_proposes_nothing(self):
+        self.assertIsNone(self.label("步兵中性", "ノ一六六"))
+
+    def sections(self, leaves, lines):
+        got = props.propose_registered(spread(leaves), lines, vocab=SECTION_VOCAB)
+        return [o["section"] and o["section"]["rank"]["ja"] for o in got["officers"]]
+
+    def test_each_officer_is_offered_the_label_of_their_own_leaf(self):
+        # spread((2, 2)): the right-hand leaf is x 200-400, the left-hand leaf x 0-200.
+        lines = [BoxedLine("步兵中尉", 410, 10, 440, 200),      # beside the right-hand leaf
+                 BoxedLine("步兵中佐", -40, 10, -10, 200)]      # beside the left-hand leaf
+        self.assertEqual(self.sections((2, 2), lines), ["中尉", "中尉", "中佐", "中佐"])
+
+    def test_a_label_far_from_the_table_belongs_to_no_leaf(self):
+        """The label of a leaf that did not register is not given to the one that did."""
+        lines = [BoxedLine("步兵中佐", 1500, 10, 1530, 200)]
+        self.assertEqual(self.sections((1,), lines), [None])
+
+    def test_a_label_inside_an_officers_cell_is_not_a_section_label(self):
+        self.assertEqual(self.sections((1,), [at(0, "post", "步兵中佐", total=1)]), [None])
+
+
 class ColumnKindTests(unittest.TestCase):
     """A column of the grid that holds no officer, proposed from what was read."""
 
