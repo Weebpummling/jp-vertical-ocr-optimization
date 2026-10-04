@@ -20,9 +20,10 @@
   "match": {
     "tolerance_frac": 0.015,
     "min_bands_matched": 10,
+    "local_min_bands_matched": 11,
     "min_explained_frac": 0.8,
     "min_columns": 2,
-    "note": "Same three gates and values as showa-teinen-meibo-A. Measured on the 1935 samples: B matches 9-12 of 12 bands with 81-100% explained on roster panels, where A matched 7-10 with 52-91% - so A rejected every 1935 panel and B takes both leaves of frames 100, 300 and 700. Known misses, left as misses rather than loosening a gate: frame 500 right leaf matches 9/12 (thin rulings), frame 60 left leaf is over-detected by multi-line posts (70% explained). The 1933 cached frames (27) register exactly as before, all to A."
+    "note": "Same three gates and values as showa-teinen-meibo-A. Measured on the 1935 samples: B matches 9-12 of 12 bands with 81-100% explained on roster panels, where A matched 7-10 with 52-91% - so A rejected every 1935 panel and B takes both leaves of frames 100, 300 and 700. Known misses, left as misses rather than loosening a gate: frame 500 right leaf matches 9/12 (thin rulings), frame 60 left leaf is over-detected by multi-line posts (70% explained). The 1933 cached frames (27) register exactly as before, all to A. Second reading (3 Oct 2026): a leaf that fails these gates under the global threshold is read again under a local one and must then match 11 of 12 bands (local_min_bands_matched). Over both Shōwa volumes that registers 647 more leaves (5,409 officers) and changes none that registered before; NDL's OCR puts a seniority number in every seniority cell of 572 of them. At 10 of 12 the second reading also took 3 of 350 front-matter and index leaves."
   },
 
   "columns": {

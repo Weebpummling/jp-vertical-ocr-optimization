@@ -20,9 +20,10 @@
   "match": {
     "tolerance_frac": 0.015,
     "min_bands_matched": 10,
+    "local_min_bands_matched": 11,
     "min_explained_frac": 0.8,
     "min_columns": 2,
-    "note": "Three gates. min_bands_matched: main-layout panels detect 11-12 of the 12 bands, index pages far fewer (Spike C); two misses are tolerated because thin rulings drop out on degraded panels. min_explained_frac: the reverse direction — measured 92-100% on true main panels versus 46-71% on index and degraded panels, so 0.8 sits in a wide gap and rejects over-detected pages that would otherwise match 12/12 by chance. min_columns: without interior vertical rulings no officer strip can be cut, so the page is a human task, not a registration."
+    "note": "Three gates. min_bands_matched: main-layout panels detect 11-12 of the 12 bands, index pages far fewer (Spike C); two misses are tolerated because thin rulings drop out on degraded panels. min_explained_frac: the reverse direction — measured 92-100% on true main panels versus 46-71% on index and degraded panels, so 0.8 sits in a wide gap and rejects over-detected pages that would otherwise match 12/12 by chance. min_columns: without interior vertical rulings no officer strip can be cut, so the page is a human task, not a registration. Second reading (3 Oct 2026): a leaf that fails these gates under the global threshold is read again under a local one and must then match 11 of 12 bands (local_min_bands_matched). Over both Shōwa volumes that registers 647 more leaves (5,409 officers) and changes none that registered before; NDL's OCR puts a seniority number in every seniority cell of 572 of them. At 10 of 12 the second reading also took 3 of 350 front-matter and index leaves."
   },
 
   "columns": {

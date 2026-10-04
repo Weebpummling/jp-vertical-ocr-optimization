@@ -7,7 +7,9 @@ check, never a CI gate (data policy: no scans in the repository).
 
 import os
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -128,6 +130,48 @@ class RegisterImageTests(unittest.TestCase):
         json.loads(json.dumps(payload))
         self.assertEqual(payload["officer_count"], 6)
         self.assertIn("needs_review", payload)
+
+
+class SecondReadingTests(unittest.TestCase):
+    """A leaf is read a second time only when the first reading fits no template."""
+
+    def setUp(self):
+        self.templates = [make_template()]
+        self.first = R.detect_leaves(make_spread())
+        self.calls = []
+
+    def reading(self, first_fails: bool):
+        def detect(image, scale=R.SCALE, *, local=False):
+            self.calls.append(local)
+            if local:
+                return [replace(g, local=True) if g is not None else None for g in self.first]
+            return [None] * len(self.first) if first_fails else self.first
+        return mock.patch.object(PS.R, "detect_leaves", detect)
+
+    def test_a_leaf_the_first_reading_lost_is_registered_by_the_second_and_says_so(self):
+        with self.reading(first_fails=True):
+            page = PS.register_spread(make_spread(), "test-pid", 42, templates=self.templates)
+        self.assertEqual(len(page.officers), 6)
+        self.assertEqual(page.panels_reread, page.panels_registered)
+        self.assertEqual(page.as_dict()["panels_reread"], list(page.panels_registered))
+
+    def test_a_leaf_that_registers_is_never_read_again(self):
+        with self.reading(first_fails=False):
+            page = PS.register_spread(make_spread(), "test-pid", 42, templates=self.templates)
+        self.assertEqual(page.panels_reread, ())
+        registered = len(page.panels_registered)
+        self.assertEqual(self.calls.count(True), 0 if registered == len(self.first) else 1,
+                         "only a leaf that failed asks for the second reading, and once")
+
+    def test_the_scan_is_read_once_for_the_whole_spread(self):
+        with self.reading(first_fails=False):
+            PS.register_spread(make_spread(), "test-pid", 42, templates=self.templates)
+        self.assertEqual(self.calls.count(False), 1)
+
+    def test_a_stored_page_remembers_which_leaves_were_reread(self):
+        with self.reading(first_fails=True):
+            page = PS.register_spread(make_spread(), "test-pid", 42, templates=self.templates)
+        self.assertEqual(PS.page_from_dict(page.as_dict()).panels_reread, page.panels_reread)
 
 
 class ShippedTemplateLabellingTests(unittest.TestCase):

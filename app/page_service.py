@@ -108,6 +108,9 @@ class RegisteredPage:
     officers: list[Officer] = dc_field(default_factory=list)
     panels_total: int = 1
     panels_registered: tuple[int, ...] = (0,)
+    # Leaves that registered only on their second reading (registration.py,
+    # "read a second time under a local threshold").
+    panels_reread: tuple[int, ...] = ()
 
     @property
     def needs_review(self) -> bool:
@@ -140,6 +143,7 @@ class RegisteredPage:
             "panels_total": self.panels_total,
             "panels_registered": list(self.panels_registered),
             "panels_missing": list(self.panels_missing),
+            "panels_reread": list(self.panels_reread),
             "officers": [o.as_dict() for o in self.officers],
         }
 
@@ -216,27 +220,51 @@ def vocabularies(vocab_dir: Path | None = None) -> dict:
     return {"ranks": ranks, "branches": branches, "kanji_variants": variants}
 
 
+class Leaves:
+    """The leaves of one scan, each read once - and a second time, under a local
+    threshold, only if a leaf asks for it. Shared across the panels of a spread
+    so the scan is not read again for each."""
+
+    def __init__(self, image, scale: float = R.SCALE):
+        self.image, self.scale = image, scale
+        self.first = R.detect_leaves(image, scale=scale)
+        self._second: list | None = None
+
+    def second(self, panel: int):
+        if self._second is None:
+            self._second = R.detect_leaves(self.image, scale=self.scale, local=True)
+        return self._second[panel] if panel < len(self._second) else None
+
+
 def register_image(image, pid: str, frame: int, *, panel: int = 0,
                    templates: list[R.Template] | None = None,
                    scale: float = R.SCALE,
-                   url_for=None) -> RegisteredPage:
+                   url_for=None, leaves: Leaves | None = None) -> RegisteredPage:
     """Register one panel of an already-loaded scan.
 
     `url_for(pid, frame, bbox)` builds the IIIF region URL; omit it to skip URL
     construction (which otherwise costs a manifest fetch per page).
-    Raises `PageNotRegistrable` if the panel matches no template.
+    Raises `PageNotRegistrable` if the panel matches no template - after a film
+    leaf has had its second reading (registration.py).
     """
     templates = templates if templates is not None else R.load_library(TEMPLATE_DIR)
-    grids = R.detect_leaves(image, scale=scale)
+    leaves = leaves or Leaves(image, scale)
+    grids = leaves.first
     if panel >= len(grids):
         raise PageNotRegistrable(
             f"{pid} frame {frame}: panel {panel} not found ({len(grids)} detected)")
 
     grid = grids[panel]
+    reg = R.classify(grid, templates) if grid is not None else None
+    if reg is None:
+        again = leaves.second(panel)
+        if again is not None:
+            reg = R.classify(again, templates)
+            if reg is not None:
+                grid = again
     if grid is None:
         raise PageNotRegistrable(
             f"{pid} frame {frame} panel {panel}: no ruling grid on this leaf")
-    reg = R.classify(grid, templates)
     if reg is None:
         raise PageNotRegistrable(
             f"{pid} frame {frame} panel {panel}: matches no template "
@@ -279,6 +307,7 @@ def register_image(image, pid: str, frame: int, *, panel: int = 0,
         officers=officers,
         panels_total=len(grids),
         panels_registered=(panel,),
+        panels_reread=(panel,) if grid.local else (),
     )
 
 
@@ -307,15 +336,17 @@ def register_spread(image, pid: str, frame: int, **kwargs) -> RegisteredPage:
     That count includes a leaf on which no grid was found at all (a blank page,
     or rulings that did not come through): it too is a leaf nobody read.
     """
-    grids = R.detect_leaves(image, scale=kwargs.get("scale", R.SCALE))
-    pages, officers, registered = [], [], []
+    leaves = Leaves(image, kwargs.get("scale", R.SCALE))
+    grids = leaves.first
+    pages, officers, registered, reread = [], [], [], []
     for index in range(len(grids)):
         try:
-            page = register_image(image, pid, frame, panel=index, **kwargs)
+            page = register_image(image, pid, frame, panel=index, leaves=leaves, **kwargs)
         except PageNotRegistrable:
             continue
         pages.append(page)
         registered.append(index)
+        reread.extend(index for _ in page.panels_reread)
         for officer in page.officers:
             officers.append(replace(officer, index=len(officers)))
     if not pages:
@@ -335,6 +366,7 @@ def register_spread(image, pid: str, frame: int, **kwargs) -> RegisteredPage:
         officers=officers,
         panels_total=len(grids),
         panels_registered=tuple(registered),
+        panels_reread=tuple(reread),
     )
 
 
@@ -405,7 +437,8 @@ def page_from_dict(d: dict, url_for=None) -> RegisteredPage:
         skew_deg=d["skew_deg"], bands_matched=d["bands_matched"],
         bands_total=d["bands_total"], explained_frac=d["explained_frac"],
         officers=officers, panels_total=d["panels_total"],
-        panels_registered=tuple(d["panels_registered"]))
+        panels_registered=tuple(d["panels_registered"]),
+        panels_reread=tuple(d.get("panels_reread", ())))
 
 
 def store_registration(home: str | Path, pid: str, frame: int,
@@ -446,7 +479,9 @@ def register_file(path: str | Path, pid: str, frame: int, **kwargs) -> Registere
     registers that leaf alone. A whole-spread registration already stored for
     this page (see above) is returned as it is, without looking at the image.
     """
-    if kwargs.get("panel") is None and "templates" not in kwargs and "scale" not in kwargs:
+    fresh = kwargs.pop("fresh", False)      # register from the scan, whatever is stored
+    if not fresh and kwargs.get("panel") is None \
+            and "templates" not in kwargs and "scale" not in kwargs:
         stored = load_stored(pid, frame, kwargs.get("url_for"))
         if stored is not None:
             return stored

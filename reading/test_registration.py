@@ -396,6 +396,117 @@ class CameraScanTests(unittest.TestCase):
         self.assertEqual(len(film.band_ys), len(self.BANDS) + 1)
 
 
+def film_spread(gutter: int) -> np.ndarray:
+    """Two ruled pages on black film, `gutter` px of black between them."""
+    page = make_panel()
+    margin = 60
+    scan = np.zeros((PANEL_H + 2 * margin, 2 * PANEL_W + gutter + 2 * margin), np.uint8)
+    scan[margin:margin + PANEL_H, margin:margin + PANEL_W] = page
+    right = margin + PANEL_W + gutter
+    scan[margin:margin + PANEL_H, right:right + PANEL_W] = page
+    return scan
+
+
+class SeparatePagesTests(unittest.TestCase):
+    """A gutter dark enough to part the two pages must not hide one of them."""
+
+    def test_two_pages_parted_by_a_black_gutter_are_two_leaves(self):
+        """Taking the largest bright region took one page for the whole spread."""
+        scan = film_spread(gutter=70)
+        panels = R.find_panels(scan)
+        self.assertEqual(len(panels), 2)
+        self.assertGreater(panels[0].x, panels[1].x, "the right-hand page is read first")
+        self.assertEqual([p.w for p in panels], [PANEL_W, PANEL_W])
+        grids = R.detect_leaves(scan, scale=1.0)
+        self.assertEqual([g.n_officer_columns for g in grids], [COL_N - 1, COL_N - 1])
+
+    def test_pages_that_touch_are_still_cut_at_the_gutter(self):
+        scan = film_spread(gutter=6)          # a shadow the closing step bridges
+        panels = R.find_panels(scan)
+        self.assertEqual(len(panels), 2)
+        grids = R.detect_leaves(scan, scale=1.0)
+        self.assertEqual([g.n_officer_columns for g in grids], [COL_N - 1, COL_N - 1])
+
+    def test_a_small_second_region_is_not_a_page(self):
+        self.assertIsNone(R._separate_pages([(0, 0, 1000, 1000), (1100, 0, 300, 400)]))
+
+    def test_regions_one_above_the_other_are_not_a_spread(self):
+        self.assertIsNone(R._separate_pages([(0, 0, 1000, 600), (0, 700, 1000, 600)]))
+
+    def test_one_region_is_cut_the_old_way(self):
+        self.assertIsNone(R._separate_pages([(0, 0, 2000, 1000)]))
+
+
+def faint_panel() -> np.ndarray:
+    """A film leaf one threshold cannot hold: exposure falling off across the
+    page, and interior rulings thin and grey against it. Frame and officer
+    columns are printed black, as on the real leaves."""
+    ramp = np.linspace(130, 235, PANEL_W).astype(np.float32)
+    img = np.tile(ramp, (PANEL_H, 1))
+    ys, xs = band_ys(), column_xs()
+    for i, y in enumerate(ys):
+        if i in (0, len(ys) - 1):
+            img[y - 1:y + 2, xs[0]:xs[-1] + 1] = 0
+        else:
+            img[y - 1:y + 1, xs[0]:xs[-1] + 1] -= 50
+    for x in xs:
+        img[TABLE_TOP:TABLE_BOT, x - 1:x + 2] = 0
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+class SecondReadingTests(unittest.TestCase):
+    """A film leaf that fits no template is read again under a local threshold."""
+
+    PANEL = R.Panel(0, 0, PANEL_W, PANEL_H)
+
+    def test_the_global_threshold_loses_faint_rulings_and_the_local_one_keeps_them(self):
+        first = R.detect_grid(faint_panel(), self.PANEL)
+        second = R.detect_grid(faint_panel(), self.PANEL, local=True)
+        self.assertLess(len(first.band_ys), len(BAND_FRACS))
+        self.assertEqual(len(second.band_ys), len(BAND_FRACS))
+        self.assertEqual(second.n_officer_columns, first.n_officer_columns)
+        self.assertTrue(second.local)
+        self.assertFalse(first.local)
+
+    def test_the_second_reading_registers_the_leaf_the_first_could_not(self):
+        template = make_template()
+        self.assertIsNone(R.classify(R.detect_grid(faint_panel(), self.PANEL), [template]))
+        reg = R.classify(R.detect_grid(faint_panel(), self.PANEL, local=True), [template])
+        self.assertIsNotNone(reg)
+        self.assertTrue(reg.is_clean)
+
+    def test_more_is_asked_of_a_second_reading(self):
+        """It sees more that is not ruling, so it must match one band more."""
+        template = make_template()            # the ordinary gate forgives one miss
+        self.assertEqual(template.local_min_bands_matched, template.min_bands_matched + 1)
+        ys = band_ys()
+        missing_one = [y for i, y in enumerate(ys) if i != 3]
+
+        def grid(local: bool) -> R.Grid:
+            return R.Grid(panel=self.PANEL, skew_deg=0.0,
+                          table=(COL_X0, ys[0], column_xs()[-1], ys[-1]),
+                          band_ys=tuple(missing_one), column_xs=tuple(column_xs()),
+                          local=local)
+
+        self.assertIsNotNone(R.classify(grid(False), [template]))
+        self.assertIsNone(R.classify(grid(True), [template]))
+
+    def test_a_template_may_set_the_second_gate_itself(self):
+        loose = make_template(match={"tolerance_frac": 0.015, "min_bands_matched": 6,
+                                     "local_min_bands_matched": 6})
+        self.assertEqual(loose.local_min_bands_matched, 6)
+
+    def test_the_gate_never_asks_for_more_bands_than_there_are(self):
+        strict = make_template(match={"tolerance_frac": 0.015,
+                                      "min_bands_matched": len(BAND_FRACS)})
+        self.assertEqual(strict.local_min_bands_matched, len(BAND_FRACS))
+
+    def test_a_camera_scan_has_no_second_reading(self):
+        bright = np.full((600, 900), 235, np.uint8)      # paper on a light backdrop
+        self.assertEqual(R.scan_kind(bright), R.BACKDROP)
+        self.assertTrue(all(g is None for g in R.detect_leaves(bright, scale=1.0, local=True)))
+
+
 class ShippedTemplateTests(unittest.TestCase):
     """The committed artifact must stay loadable and self-consistent."""
 

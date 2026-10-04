@@ -121,6 +121,28 @@ TABLE_RULING_SMEAR = 5
 TABLE_RULING_MIN_FRAC = 0.5
 COLUMN_RULING_SMEAR = 5
 
+# Two bright regions are the two leaves of a spread when the smaller is at
+# least this fraction of the larger, in area and in shared height.
+SEPARATE_PAGE_MIN_RATIO = 0.5
+
+# A film leaf is binarized with one Otsu threshold, and on a leaf exposed
+# unevenly that threshold loses the thin interior rulings: pid 1449426 frame 60's
+# left leaf, ten clean columns and every ruling plain to the eye, came back with
+# 5 of its 12 bands. Measured over both Shōwa volumes (3 Oct 2026): 807 leaves
+# of real roster pages fit no template - a fifth to a quarter of each volume's
+# officers out of any reader's reach - and on every one of them what was found
+# sat exactly on the template, with rulings simply missing.
+#
+# Such a leaf is read a second time under a local threshold (`local=True`: the
+# camera scans' binarization, the film path's line logic). Only leaves that
+# failed are re-read, so no leaf that registers today can change. The second
+# reading sees more - including more that is not ruling - so the template asks
+# more of it: `local_min_bands_matched`, by default one band above the ordinary
+# gate. On the 807 failing leaves that registers 650, corroborated by NDL's own
+# OCR as well as the leaves that always registered (a seniority number inside
+# 93.6% of their seniority cells, against 92.0%); at the ordinary gate it also
+# took 3 of 350 front-matter and index leaves, all three matching only 10 of 12.
+
 
 # --------------------------------------------------------------------------
 # geometry containers
@@ -156,6 +178,8 @@ class Grid:
     band_ys: tuple[int, ...]
     column_xs: tuple[int, ...]
     interpolated_columns: tuple[int, ...] = ()
+    # True when this is a film leaf's second reading, under a local threshold.
+    local: bool = False
 
     @property
     def table_height(self) -> int:
@@ -197,6 +221,8 @@ class Template:
     expected_columns: int
     provenance: dict
     required_bands: tuple[int, ...] = ()
+    # What a film leaf's second reading must match (see the note on `local`).
+    local_min_bands_matched: int = 0
     # Band intervals (pairs of band indices) inside which a detected ruling is
     # not counted against the page: cells of dense small type whose rows read
     # as lines. Declared by the layout, never inferred from the page.
@@ -217,6 +243,10 @@ class Template:
             expected_columns=d.get("columns", {}).get("expected", 0),
             provenance=d.get("provenance", {}),
             required_bands=tuple(m.get("required_bands", ())),
+            local_min_bands_matched=m.get(
+                "local_min_bands_matched",
+                min(len(d["band_fracs"]),
+                    m.get("min_bands_matched", len(d["band_fracs"]) - 1) + 1)),
             text_intervals=tuple((a, b) for a, b in m.get("text_intervals", ())),
         )
 
@@ -250,17 +280,48 @@ class Registration:
 # detection
 # --------------------------------------------------------------------------
 
-def _bright_region(gray: np.ndarray) -> tuple[int, int, int, int] | None:
-    """The largest bright region of a scan (x, y, w, h), or None."""
+def _bright_regions(gray: np.ndarray) -> list[tuple[int, int, int, int]]:
+    """The large bright regions of a scan as (x, y, w, h), largest first."""
     _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     bw = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
     contours, _ = cv2.findContours(bw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     h, w = gray.shape
     regions = [cv2.boundingRect(c) for c in contours]
     regions = [r for r in regions if r[2] * r[3] > MIN_PANEL_AREA * w * h]
-    if not regions:
+    return sorted(regions, key=lambda r: -(r[2] * r[3]))
+
+
+def _bright_region(gray: np.ndarray) -> tuple[int, int, int, int] | None:
+    """The largest bright region of a scan (x, y, w, h), or None."""
+    regions = _bright_regions(gray)
+    return regions[0] if regions else None
+
+
+def _separate_pages(regions: list[tuple[int, int, int, int]]) -> list[Panel] | None:
+    """The two leaves of a spread whose gutter is dark enough to part them.
+
+    Usually the two pages touch and are one bright region, cut at the gutter.
+    Where the book lay less flat the gutter is black from top to bottom and the
+    pages are two regions - and taking "the largest bright region" then took one
+    page for the whole spread, cut it down its middle, and never looked at the
+    other. On pid 1449474 that was 243 of 778 registered pages, each showing the
+    officers of one leaf as two short "leaves" and none of the other's
+    (frame 67: ten officers offered, twenty-one on the page); 102 pages of pid
+    1449426. Two regions side by side, comparable in size and height, are the
+    two leaves.
+    """
+    if len(regions) < 2:
         return None
-    return max(regions, key=lambda r: r[2] * r[3])
+    a, b = regions[0], regions[1]
+    if b[2] * b[3] < SEPARATE_PAGE_MIN_RATIO * a[2] * a[3]:
+        return None
+    left, right = (a, b) if a[0] < b[0] else (b, a)
+    if left[0] + left[2] > right[0]:                      # they overlap sideways
+        return None
+    overlap = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+    if overlap < SEPARATE_PAGE_MIN_RATIO * min(a[3], b[3]):
+        return None
+    return [Panel(*right), Panel(*left)]
 
 
 def scan_kind(gray: np.ndarray) -> str | None:
@@ -287,9 +348,13 @@ def find_panels(gray: np.ndarray) -> list[Panel]:
     the cut does need is overlap (GUTTER_OVERLAP) - without it the frame ruling
     beside the gutter falls outside EDGE_HI and each leaf loses an officer.
     """
-    region = _bright_region(gray)
-    if region is None:
+    regions = _bright_regions(gray)
+    if not regions:
         return []
+    apart = _separate_pages(regions)
+    if apart is not None:
+        return apart
+    region = regions[0]
     h, w = gray.shape
     x, y, cw, ch = region
     col_mean = gray[y:y + ch, x:x + cw].mean(axis=0)
@@ -671,7 +736,8 @@ def _binarize(gray: np.ndarray, kind: str) -> np.ndarray:
 
 
 def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
-                outer: str = "right", gutter_overlap: float = 0.0) -> Grid | None:
+                outer: str = "right", gutter_overlap: float = 0.0,
+                local: bool = False) -> Grid | None:
     """Detect the ruling grid on one already-cropped panel.
 
     `panel_gray` is the panel at detection scale; `panel` describes where that
@@ -680,15 +746,18 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
     leaf away from the gutter ("right" for the right-hand page) and
     `gutter_overlap` how far, in panel px, the leaf reaches past the gutter cut.
     Returns None when the panel has no table-like ruling structure at all.
+    `local` is a film leaf's second reading: the local threshold the camera
+    scans are read with, and everything else as a film leaf is read.
     """
-    binv = _binarize(panel_gray, kind)
+    threshold = BACKDROP if local else kind
+    binv = _binarize(panel_gray, threshold)
     angle = _deskew_angle(binv)
     if abs(angle) > 0.05:
         ph, pw = panel_gray.shape
         rot = cv2.getRotationMatrix2D((pw / 2, ph / 2), angle, 1.0)
         panel_gray = cv2.warpAffine(panel_gray, rot, (pw, ph),
                                     flags=cv2.INTER_LINEAR, borderValue=255)
-        binv = _binarize(panel_gray, kind)
+        binv = _binarize(panel_gray, threshold)
     horiz, vert = _ruling_masks(binv)
 
     hlines = _profile_lines(horiz, axis=0)
@@ -727,10 +796,12 @@ def detect_grid(panel_gray: np.ndarray, panel: Panel, *, kind: str = FILM,
         band_ys=tuple(hlines),
         column_xs=tuple(columns),
         interpolated_columns=tuple(interpolated),
+        local=local,
     )
 
 
-def detect_leaves(image: np.ndarray, scale: float = SCALE) -> list[Grid | None]:
+def detect_leaves(image: np.ndarray, scale: float = SCALE, *,
+                  local: bool = False) -> list[Grid | None]:
     """One entry per page panel of a scan, in reading order: its grid, or None
     when the leaf has no table-like ruling structure.
 
@@ -742,10 +813,16 @@ def detect_leaves(image: np.ndarray, scale: float = SCALE) -> list[Grid | None]:
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     small = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     kind = scan_kind(small)
+    panels = find_panels(small)
+    if local and kind != FILM:
+        # A camera scan is already read under the local threshold; there is no
+        # second reading to give it.
+        return [None] * len(panels)
     overlap = GUTTER_OVERLAP * small.shape[1] if kind == BACKDROP else 0.0
     return [detect_grid(small[p.y:p.y + p.h, p.x:p.x + p.w], p, kind=kind,
-                        outer="right" if i == 0 else "left", gutter_overlap=overlap)
-            for i, p in enumerate(find_panels(small))]
+                        outer="right" if i == 0 else "left", gutter_overlap=overlap,
+                        local=local)
+            for i, p in enumerate(panels)]
 
 
 def detect_page(image: np.ndarray, scale: float = SCALE) -> list[Grid]:
@@ -852,7 +929,7 @@ def classify(grid: Grid, templates: list[Template]) -> Registration | None:
     best: Registration | None = None
     for t in templates:
         reg = register(grid, t)
-        if reg.matched < t.min_bands_matched:
+        if reg.matched < (t.local_min_bands_matched if grid.local else t.min_bands_matched):
             continue
         if any(b in reg.unmatched_bands for b in t.required_bands):
             continue
