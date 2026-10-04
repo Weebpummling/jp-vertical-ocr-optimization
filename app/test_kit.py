@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -284,11 +285,150 @@ class StoredRegistrationTests(KitCase):
         with self.assertRaises(FileNotFoundError):
             ps.register_file(self.tmp / "no-such.jpg", "p", 3)
 
-    def test_a_kit_is_not_built_from_inside_another_kit(self):
-        cache = self.home() / "cache" / "p"
-        (cache / kit_build.STORED).mkdir(parents=True)
+    def test_a_fresh_registration_ignores_what_is_stored(self):
+        page = spread((2, 1))
+        ps.store_registration(self.home(), page.pid, page.frame, page)
+        with self.assertRaises(FileNotFoundError):
+            ps.register_file(self.tmp / "no-such.jpg", page.pid, page.frame, fresh=True)
+
+    def test_a_volume_is_not_prepared_inside_a_kit(self):
+        home = self.home()
+        os.environ[kit.OFFLINE_ENV] = "1"
         with self.assertRaises(kit_build.KitError):
-            kit_build.prepare_volume_data(cache, self.tmp / "out", "p", [1])
+            kit_build.prepare_volume(home, "p", [1])
+
+
+def ndl_doc(frames: dict[int, list[tuple[str, float, float]]], count: int) -> dict:
+    """An NDL fulltext document: per frame, (text, x centre, y centre) lines."""
+    entries = []
+    for n in range(1, count + 1):
+        coords = [{"contenttext": text, "xmin": x - 10, "ymin": y - 10,
+                   "xmax": x + 10, "ymax": y + 10} for text, x, y in frames.get(n, [])]
+        entries.append({"id": str(n), "coordjson": json.dumps(coords)})
+    return {"list": entries}
+
+
+class PrepareVolumeTests(KitCase):
+    """Preparing a volume: every page registered once, stored, and reported on."""
+
+    def volume(self, doc: dict | None = None) -> Path:
+        """A data home holding volume 'p': two scans, a manifest, NDL's OCR."""
+        from PIL import Image
+        from test_page_service import make_spread
+        home = self.tmp / "data"
+        cache = home / "cache" / "p"
+        cache.mkdir(parents=True)
+        for frame in (1, 2):
+            Image.fromarray(make_spread()).save(cache / kit_build.frame_name(frame), quality=95)
+        (cache / "manifest.json").write_text("{}", encoding="utf-8")
+        (cache / "ndl_fulltext_raw.json").write_text(
+            json.dumps(doc or ndl_doc({}, 2)), encoding="utf-8")
+        os.environ["JP_OCR_DATA"] = str(home)
+        return home
+
+    def test_every_page_is_registered_stored_and_surveyed(self):
+        home = self.volume()
+        record = kit_build.prepare_volume(home, "p", [1, 2])
+        cache = home / "cache" / "p"
+        self.assertEqual(record["frames"], 2)
+        self.assertEqual(record["registration"], kit_build.registration_fingerprint())
+        self.assertTrue((cache / "registered" / "frame_0002.json").exists())
+        self.assertTrue((cache / "small" / "frame_0001.jpg").exists())
+        survey = json.loads((cache / "survey.json").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(survey["frames"]), ["1", "2"])
+        self.assertEqual(kit_build.prepared(home, "p")["prepared_at"], record["prepared_at"])
+
+    def test_a_prepared_volume_goes_into_a_kit_with_its_registrations(self):
+        home = self.volume()
+        kit_build.prepare_volume(home, "p", [1, 2])
+        data = self.tmp / "kit" / "data"
+        stats = kit_build.install_volume(home, data, "p", [1, 2])
+        dest = data / "cache" / "p"
+        self.assertEqual(stats["frames"], 2)
+        for name in ("frame_0001.jpg", "registered/frame_0001.json", "survey.json",
+                     "manifest.json", "ndl_fulltext_raw.json"):
+            self.assertTrue((dest / name).exists(), name)
+        # The kit reads back exactly what the lead's machine stored.
+        os.environ["JP_OCR_DATA"] = str(data)
+        os.environ[kit.OFFLINE_ENV] = "1"
+        with self.assertRaises(ps.PageNotRegistrable):       # a synthetic scan fits no template
+            ps.register_file(dest / "frame_0001.jpg", "p", 1)
+
+    def test_a_kit_is_not_cut_from_an_unprepared_volume(self):
+        home = self.volume()
+        with self.assertRaises(kit_build.KitError) as caught:
+            kit_build.install_volume(home, self.tmp / "kit" / "data", "p", [1, 2])
+        self.assertIn("prepare_volume.py", str(caught.exception))
+
+    def test_a_kit_is_not_cut_once_the_detector_or_a_template_has_changed(self):
+        home = self.volume()
+        kit_build.prepare_volume(home, "p", [1, 2])
+        record_path = home / "cache" / "p" / "prepared.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record["registration"] = "an-older-detector"
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+        with self.assertRaises(kit_build.KitError) as caught:
+            kit_build.install_volume(home, self.tmp / "kit" / "data", "p", [1, 2])
+        self.assertIn("--redo", str(caught.exception))
+
+
+class ReadinessTests(KitCase):
+    """NDL's OCR says what the grid missed."""
+
+    def report(self, pages: dict, numbers: dict, count: int) -> dict:
+        home = self.tmp / "data"
+        cache = home / "cache" / "p"
+        cache.mkdir(parents=True)
+        (cache / "ndl_fulltext_raw.json").write_text(
+            json.dumps(ndl_doc(numbers, count)), encoding="utf-8")
+        for frame in range(1, count + 1):
+            page = pages.get(frame)
+            ps.store_registration(home, "p", frame,
+                                  replace(page, frame=frame) if page else None, "no grid")
+        return kit_build.readiness(home, "p", list(range(1, count + 1)))
+
+    def test_a_page_whose_officers_all_sit_in_cells_has_nothing_out_of_reach(self):
+        # spread((2,)): officers at x 100-200 and 0-100; seniority is the top 100 px.
+        got = self.report({1: spread((2,))}, {1: [("915", 150, 50), ("916", 50, 50)]}, 1)
+        self.assertEqual((got["roster"], got["officers"], got["out_of_reach"]), (1, 2, 0))
+        self.assertEqual(got["pages"], [])
+
+    def test_a_missing_leaf_counts_the_numbers_it_left_behind(self):
+        half = replace(spread((2,)), panels_total=2, panels_registered=(0,))
+        got = self.report({1: half}, {1: [("915", 150, 50), ("931", 450, 50), ("932", 550, 50)]}, 1)
+        self.assertEqual(got["leaf_missing"], 1)
+        self.assertEqual(got["pages"], [{"frame": 1, "problem": "leaf_missing",
+                                         "officers_lost": 2, "leaf": "left"}])
+
+    def test_numbers_outside_the_grid_mean_a_table_cut_short(self):
+        got = self.report({1: spread((2,))},
+                          {1: [("915", 150, 50), ("917", 350, 50), ("918", 450, 50)]}, 1)
+        self.assertEqual((got["cut_short"], got["out_of_reach"]), (1, 2))
+
+    def test_a_number_on_another_row_is_not_an_officer_outside_the_grid(self):
+        got = self.report({1: spread((2,))},
+                          {1: [("915", 150, 50), ("19", 350, 350), ("21", 450, 350)]}, 1)
+        self.assertEqual(got["cut_short"], 0)
+
+    def test_a_rejected_page_between_roster_pages_that_carries_numbers_is_reported(self):
+        numbers = [(str(900 + i), 50 + 40 * i, 50) for i in range(10)]
+        got = self.report({1: spread((2,)), 3: spread((2,))}, {2: numbers}, 3)
+        self.assertEqual(got["not_registered"], 1)
+        self.assertEqual(got["pages"][0]["frame"], 2)
+
+    def test_front_matter_is_not_reported_as_a_lost_roster_page(self):
+        numbers = [(str(i), 50 + 40 * i, 50) for i in range(10)]
+        got = self.report({2: spread((2,)), 3: spread((2,))}, {1: numbers}, 3)
+        self.assertEqual(got["not_registered"], 0)
+
+    def test_the_report_is_written_to_read_and_to_sort(self):
+        half = replace(spread((2,)), panels_total=2, panels_registered=(1,))
+        got = self.report({1: half}, {1: [("931", 450, 50), ("932", 550, 50)]}, 1)
+        md, table = kit_build.write_readiness(self.tmp / "out", got, "vol p")
+        self.assertIn("out of a reader's reach", md.read_text(encoding="utf-8"))
+        rows = table.read_text(encoding="utf-8-sig").splitlines()
+        self.assertEqual(len(rows), 2)
+        self.assertIn("right", rows[1])
 
 
 class LauncherTests(KitCase):

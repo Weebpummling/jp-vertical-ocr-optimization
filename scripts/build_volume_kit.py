@@ -9,15 +9,15 @@ is installed and nothing is fetched; their work comes home as one small file
 
 What it does, in order - and it stops at the first thing that is not right:
 
-  1. checks the volume is complete on this machine: every page image, NDL's OCR
-     and the manifest (a kit cannot fetch what it lacks);
+  1. checks the volume is complete on this machine and has been prepared
+     (scripts/prepare_volume.py: every page registered here, once, and stored);
   2. finds the reader in the master database, or adds them;
   3. cuts a database holding only this volume, ids intact (app/kit_build.py);
-  4. registers every page from its original scan, here, and stores the result in
-     the kit - a kit never registers a page itself, so what a reader records
-     against is exactly what this machine sees (app/page_service.py). Because of
-     that the page images can be shipped smaller: by default they are recompressed
-     to about 40% of their size (--images original copies them untouched);
+  4. copies the volume in with its stored registrations - a kit never registers
+     a page itself, so what a reader records against is exactly what this
+     machine sees (app/page_service.py). Because of that the page images can be
+     shipped smaller: by default the ones recompressed to about 40% of their
+     size when the volume was prepared (--images original copies the scans);
   5. starts the kit's own program against the result and has it open pages the
      way a reader will (its --selftest), so a kit that would not work is never
      sent;
@@ -139,7 +139,6 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--images", choices=("small", "original"), default="small")
     ap.add_argument("--out", help="folder to write the kit into (default: <data home>/kits)")
     ap.add_argument("--issuer", help="your id code, to record who added a new reader")
-    ap.add_argument("--workers", type=int, default=max(1, min(8, (os.cpu_count() or 2) - 2)))
     ap.add_argument("--rebuild-app", action="store_true", help="rebuild the kit program first")
     ap.add_argument("--force", action="store_true", help="replace a kit already built here")
     ap.add_argument("--no-zip", action="store_true", help="leave the folder, write no zip")
@@ -165,6 +164,11 @@ def main(argv: list[str]) -> int:
     problems = kit_build.check_volume_data(cache, volume["frames"])
     if problems:
         raise SystemExit("the volume's data is not complete:\n  " + "\n  ".join(problems))
+    record = kit_build.prepared(vs.data_home(), args.pid)
+    if record is None or record["registration"] != kit_build.registration_fingerprint():
+        raise SystemExit(f"{args.pid} is not prepared with the current detector and templates.\n"
+                         f"  python scripts/prepare_volume.py {args.pid}"
+                         + (" --redo" if record else ""))
 
     ensure_app(args.rebuild_app)
     reader = find_or_add_reader(args.reader, args.issuer)
@@ -187,20 +191,15 @@ def main(argv: list[str]) -> int:
         print(f"database        {counts['source_page']} pages, {counts['observation']} readings "
               f"already on record, {counts['app_user']} people")
 
-        def progress(done: int, total: int) -> None:
-            if done == total or done % 50 == 0:
-                print(f"\rpages           {done}/{total}", end="", flush=True)
-
-        stats = kit_build.prepare_volume_data(cache, data, args.pid, volume["frames"],
-                                              images=args.images, workers=args.workers,
-                                              progress=progress)
-        print(f"\rpages           {stats['frames']} registered here and stored: "
-              f"{stats['roster']} roster pages, {stats['officers']} officers; "
-              f"images {stats['bytes'] / 1e6:.0f} MB ({args.images})")
+        stats = kit_build.install_volume(vs.data_home(), data, args.pid, volume["frames"],
+                                         images=args.images)
+        print(f"pages           {stats['frames']} with the registrations stored when the "
+              f"volume was prepared: {stats['roster']} roster pages, {stats['officers']} "
+              f"officers; images {stats['bytes'] / 1e6:.0f} MB ({args.images})")
         kit_build.write_assignment(data / "assignment.json", volume=volume, reader=reader,
                                    return_to=args.return_to, images=args.images,
                                    app_commit=build_kit_app.commit(),
-                                   registered_with=kit_build.libraries())
+                                   registered_with=stats["registered_with"])
         template = (ROOT / "kit" / "README-FIRST.txt").read_text(encoding="utf-8")
         (stage / "README-FIRST.txt").write_text(
             template.format(title=volume["title"], reader=reader["display_name"],

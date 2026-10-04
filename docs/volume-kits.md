@@ -9,41 +9,58 @@ Decided 3 Oct 2026. One reader per volume; Windows only; no network.
 
 ## For the lead
 
-### 1. Build a kit
+### 1. Prepare the volume (once)
+
+```
+python scripts/prepare_volume.py 1449426        # or --all
+```
+
+Registers every page of the volume from its original scan, on this machine, and stores
+the result in the data home (`cache/<pid>/registered/`). From then on this workstation
+and every kit read that same stored result - see "Why a kit never registers a page"
+below. It also makes the smaller page images kits carry, and writes a **readiness
+report** to `<data home>/kits/readiness/`: how many officers a reader can record, and
+which pages hold officers they cannot (one leaf did not register; a roster page fits no
+template; numbers sit outside the grid). About three minutes a volume.
+
+A prepared volume stays as it is until you run it again with `--redo` - which is what
+to do after the detector or a template changes. Before anything stored is replaced,
+every page that already has readings is registered afresh and each recorded officer
+looked for where it was; if any would move, nothing is written unless `--force`.
+
+### 2. Build a kit
 
 ```
 python scripts/build_volume_kit.py 1449426 --reader "Tanaka Hanako" ^
     --return-to "Email that file to lead@example.org."
 ```
 
-Run it with the same Python the workstation runs on. It:
+Run both with the same Python the workstation runs on. The builder:
 
-1. checks the volume is complete on this machine (every page image, NDL's OCR, the
-   manifest) — a kit cannot fetch what it lacks;
+1. checks the volume is complete and prepared with the current detector and templates;
 2. finds the reader in the master database, or adds them;
 3. cuts a database holding only that volume, with every id intact;
-4. **registers every page here and stores the result in the kit** (see below), and puts
-   the page images in — recompressed to about 40% of their size unless
-   `--images original`;
-5. starts the kit's own program and has it open pages as a reader will. A kit that fails
-   this is not zipped;
+4. copies the volume in with its stored registrations and page images - the smaller
+   ones unless `--images original`;
+5. starts the kit's own program and has it open pages as a reader will, with every
+   proxy pointed at a dead port. A kit that fails this is not zipped;
 6. zips it into `<data home>/kits/Roster-<pid>-<reader>.zip`.
 
-Measured on the 1933 volume (874 pages): about seven minutes, and a 1.5 GB zip - 1.4 GB of
-page images and 0.2 GB of program. With `--images original` the images alone are 3.4 GB.
-That is a download link, not an email attachment.
+A kit is a 1.5 GB zip for a Shōwa volume - 1.4 GB of page images and 0.2 GB of program;
+with `--images original` the images alone are 3.4 GB. That is a download link, not an
+email attachment.
 
 The kit program itself (`build/kit-app/`) is built on first use by
 `scripts/build_kit_app.py` in its own environment (`.venv-kit`), and reused. Pass
 `--rebuild-app` after changing the workstation.
 
-### 2. Send it
+### 3. Send it
 
 Send the zip. `README-FIRST.txt` inside tells the reader the three steps; the one thing
 worth saying in your own message is that Windows will warn about an unrecognised program
 the first time ("More info" → "Run anyway").
 
-### 3. Merge what comes back
+### 4. Merge what comes back
 
 The reader presses **Send in my work**, which writes `roster-<pid>-….zip` into the kit's
 `outbox` folder and opens that folder. They send you the file — a megabyte or so.
@@ -81,8 +98,8 @@ A reading is recorded against an officer's position on the page. A kit that coun
 columns differently from the master would file readings under the wrong officer, and
 nothing would look wrong.
 
-So the lead's machine registers every page when the kit is built and ships the result
-(`data/cache/<pid>/registered/`), and the kit reads it back
+So the lead's machine registers every page when the volume is prepared, stores the result
+(`cache/<pid>/registered/`), and every kit carries a copy and reads it back
 (`app/page_service.py`, "stored registrations"). In a kit, a page with nothing stored is
 an error, never a cue to compute. Two consequences:
 
